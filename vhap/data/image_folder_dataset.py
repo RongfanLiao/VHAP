@@ -9,13 +9,17 @@ from vhap.util.log import get_logger
 logger = get_logger(__name__)
 
 
+def _identity(x):
+    return x
+
+
 class ImageFolderDataset(Dataset):
     def __init__(
         self,
         image_folder: Path,
         background_folder: Optional[Path]=None,
-        background_fname2camId=lambda x: x,
-        image_fname2camId=lambda x: x,
+        background_fname2camId=_identity,
+        image_fname2camId=_identity,
     ):
         """
         Args:

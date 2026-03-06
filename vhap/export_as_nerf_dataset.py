@@ -39,6 +39,10 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 max_threads = min(multiprocessing.cpu_count(), 8)
 
 
+def _identity_collate(x):
+    return x
+
+
 class NeRFDatasetWriter:
     def __init__(self, cfg_data: DataConfig, tgt_folder: Path, subset:Optional[str]=None, scale_factor: Optional[float]=None, background_color: Optional[str]=None):
         self.cfg_data = cfg_data
@@ -51,7 +55,7 @@ class NeRFDatasetWriter:
         cfg_data.background_color = 'white'
         cfg_data.use_alpha_map = True
         dataset = import_module(cfg_data._target)(cfg=cfg_data, batchify_all_views=False)
-        self.dataloader = DataLoader(dataset, shuffle=False, batch_size=None, collate_fn=lambda x: x, num_workers=min(multiprocessing.cpu_count(), 8))
+        self.dataloader = DataLoader(dataset, shuffle=False, batch_size=None, collate_fn=_identity_collate, num_workers=min(multiprocessing.cpu_count(), 8))
 
     def write(self):
         if not self.tgt_folder.exists():

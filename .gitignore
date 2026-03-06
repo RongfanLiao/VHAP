@@ -148,9 +148,10 @@ tags
 .vscode/
 
 .DS_Store
-.pkl
+*.pkl
 tmp
 
 output/
 export/
 /data/
+.claude/
