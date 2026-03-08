@@ -1350,10 +1350,10 @@ class GlobalTracker(FlameTracker):
         # sequential optimization of timesteps
         self.logger.info(f"Start sequential tracking FLAME in {self.n_timesteps} frames")
         dataloader = DataLoader(
-            self.dataset, 
-            batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None, 
-            shuffle=False, 
-            num_workers=4
+            self.dataset,
+            batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
+            shuffle=False,
+            num_workers=0
         )
         for sample in dataloader:
             if sample["timestep_index"][0].item() == 0:
@@ -1376,10 +1376,10 @@ class GlobalTracker(FlameTracker):
         self.logger.info(f"Start global optimization of all frames")
         # global optimization with random sampling
         dataloader = DataLoader(
-            self.dataset, 
-            batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None, 
-            shuffle=True, 
-            num_workers=4
+            self.dataset,
+            batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
+            shuffle=True,
+            num_workers=0
         )
         if self.cfg.exp.photometric:
             self.optimize_stage(stage='rgb_global_tracking', dataloader=dataloader, lr_scale=0.1)
