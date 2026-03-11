@@ -814,12 +814,21 @@ class FlameTracker:
         with open(obj_path, 'w') as f:
             f.write(get_obj_content(vertices, faces, uv_coordinates, uv_indices, mtl_path.name))
     
+    _async_semaphore = threading.Semaphore(4)  # limit concurrent async threads
+
     def async_func(func):
-        """Decorator to run a function asynchronously"""
+        """Decorator to run a function asynchronously with bounded concurrency"""
+        def _thread_target(semaphore, *args, **kwargs):
+            try:
+                func(*args, **kwargs)
+            finally:
+                semaphore.release()
+
         def wrapper(*args, **kwargs):
             self = args[0]
             if self.cfg.async_func:
-                thread = threading.Thread(target=func, args=args, kwargs=kwargs)
+                self._async_semaphore.acquire()  # blocks if 4 threads already running
+                thread = threading.Thread(target=_thread_target, args=(self._async_semaphore, *args), kwargs=kwargs)
                 thread.start()
             else:
                 func(*args, **kwargs)
