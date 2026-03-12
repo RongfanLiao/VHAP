@@ -1,14 +1,13 @@
 """Export tracked FLAME parameters as a lightweight dataset (no images/masks).
 
-Outputs only camera transforms, canonical FLAME parameters, and a single
-all-frame FLAME parameter file.
+Outputs camera transforms and a single all-frame FLAME parameter file
+(including canonical parameters, appearance, and per-frame dynamics).
 
 Output structure::
 
     tgt_folder/
-    ├── transforms.json              # per-frame camera intrinsics & extrinsics
-    ├── canonical_flame_param.npz    # neutral pose with identity shape
-    └── flame_param.npz              # all frames in one file (N, ...)
+    ├── transforms.json       # per-frame camera intrinsics & extrinsics
+    └── flame_param.npz       # all data in one file
 
 Usage::
 
@@ -122,8 +121,8 @@ class FLAMEParamDatasetWriter:
     def write(self) -> None:
         """Run the full export pipeline.
 
-        Creates ``transforms.json``, ``canonical_flame_param.npz``, and
-        ``flame_param.npz`` under :attr:`tgt_folder`.
+        Creates ``transforms.json`` and ``flame_param.npz`` under
+        :attr:`tgt_folder`.
         """
         if not self.tgt_folder.exists():
             self.tgt_folder.mkdir(parents=True)
@@ -131,7 +130,6 @@ class FLAMEParamDatasetWriter:
         db = self._build_transforms()
         write_json(db, self.tgt_folder)
 
-        self._write_canonical_flame_param()
         self._write_flame_param(db)
 
     # ------------------------------------------------------------------
@@ -234,24 +232,6 @@ class FLAMEParamDatasetWriter:
         db["camera_indices"] = sorted(camera_indices)
         return db
 
-    def _write_canonical_flame_param(self) -> None:
-        """Write the canonical (neutral-pose) FLAME parameters."""
-        flame_param: Dict[str, np.ndarray] = {
-            "translation": np.zeros_like(self.flame_params["translation"][:1]),
-            "rotation": np.zeros_like(self.flame_params["rotation"][:1]),
-            "neck_pose": np.zeros_like(self.flame_params["neck_pose"][:1]),
-            "jaw_pose": np.array([[0.3, 0, 0]]),  # slightly open mouth
-            "eyes_pose": np.zeros_like(self.flame_params["eyes_pose"][:1]),
-            "shape": self.flame_params["shape"],
-            "expr": np.zeros_like(self.flame_params["expr"][:1]),
-        }
-        if "static_offset" in self.flame_params:
-            flame_param["static_offset"] = self.flame_params["static_offset"]
-
-        path = self.tgt_folder / "canonical_flame_param.npz"
-        print(f"Writing canonical FLAME parameters to: {path}")
-        write_data({path: flame_param})
-
     def _write_flame_param(self, db: Dict) -> None:
         """Write a single ``flame_param.npz`` containing all exported frames.
 
@@ -281,6 +261,18 @@ class FLAMEParamDatasetWriter:
             params["static_offset"] = self.flame_params["static_offset"]
         if "dynamic_offset" in self.flame_params:
             params["dynamic_offset"] = self.flame_params["dynamic_offset"][ti_orig_list]
+        if "tex_extra" in self.flame_params:
+            params["tex_extra"] = self.flame_params["tex_extra"]
+        if "lights" in self.flame_params:
+            params["lights"] = self.flame_params["lights"]
+
+        # Canonical (neutral-pose) parameters
+        params["canonical_translation"] = np.zeros_like(self.flame_params["translation"][:1])
+        params["canonical_rotation"] = np.zeros_like(self.flame_params["rotation"][:1])
+        params["canonical_neck_pose"] = np.zeros_like(self.flame_params["neck_pose"][:1])
+        params["canonical_jaw_pose"] = np.array([[0.3, 0, 0]])  # slightly open mouth
+        params["canonical_eyes_pose"] = np.zeros_like(self.flame_params["eyes_pose"][:1])
+        params["canonical_expr"] = np.zeros_like(self.flame_params["expr"][:1])
 
         path = self.tgt_folder / "flame_param.npz"
         print(f"Writing all-frame FLAME parameters ({len(ti_orig_list)} frames) to: {path}")
