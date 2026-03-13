@@ -9,15 +9,23 @@ Integrates the three data-extraction steps into a single script:
 Usage::
 
     # Minimal (all defaults)
+    # if not specify export_output_folder, 
+    # it will be set to track_output_folder / "exported" by default.
+
     python vhap/preprocess_track_export.py \\
         --input data/monocular/obama.mp4 \\
-        --track-output-folder output/monocular/obama \\
+        --output-folder output/monocular/obama \\
+    
+    # alternatively, you can specify export_output_folder explicitly:
+    python vhap/preprocess_track_export.py \\
+        --input data/monocular/obama.mp4 \\
+        --output-folder output/monocular/obama \\
         --export-output-folder export/monocular/obama
 
     # With foreground matting and specific epoch
     python vhap/preprocess_track_export.py \\
         --input data/monocular/obama.mp4 \\
-        --track-output-folder output/monocular/obama \\
+        --output-folder output/monocular/obama \\
         --export-output-folder export/monocular/obama \\
         --matting-method robust_video_matting \\
         --epoch 20
@@ -181,8 +189,8 @@ def main(
     # --- Input ---
     input: Annotated[Path, arg(aliases=["-i"])],
     # --- Output ---
-    track_output_folder: Annotated[Path, arg(aliases=["-t"])],
-    export_output_folder: Annotated[Path, arg(aliases=["-e"])],
+    output_folder: Annotated[Path, arg(aliases=["-t"])] = None,
+    export_output_folder: Annotated[Path, arg(aliases=["-e"])] = None,
     # --- Preprocess ---
     target_fps: int = 25,
     matting_method: Optional[
@@ -209,9 +217,7 @@ def main(
     # ------------------------------------------------------------------
     # Step 1: Preprocess — extract frames from video
     # ------------------------------------------------------------------
-    print("=" * 60)
-    print("Step 1/3: Preprocessing video")
-    print("=" * 60)
+    print("\n>>> Step 1/3: Preprocessing video")
     root_folder, sequence, _ = _preprocess(
         input_path=input,
         target_fps=target_fps,
@@ -221,13 +227,13 @@ def main(
     # ------------------------------------------------------------------
     # Step 2: Track — FLAME optimisation
     # ------------------------------------------------------------------
-    print("\n" + "=" * 60)
-    print("Step 2/3: FLAME tracking")
-    print("=" * 60)
+    if export_output_folder is None:
+       export_output_folder = output_folder / "exported"
+    print("\n>>> Step 2/3: FLAME tracking")
     cfg = _build_tracking_config(
         root_folder=root_folder,
         sequence=sequence,
-        output_folder=track_output_folder,
+        output_folder=output_folder,
         device=device,
         batch_size=batch_size,
     )
@@ -236,14 +242,12 @@ def main(
 
     # The tracker writes outputs into a timestamped subfolder.
     # load_config() resolves the actual subfolder containing config.yml.
-    src_folder, cfg_saved = load_config(track_output_folder)
+    src_folder, cfg_saved = load_config(output_folder)
 
     # ------------------------------------------------------------------
     # Step 3: Export — lightweight FLAME parameter dataset
     # ------------------------------------------------------------------
-    print("\n" + "=" * 60)
-    print("Step 3/3: Exporting FLAME parameters")
-    print("=" * 60)
+    print("\n>>> Step 3/3: Exporting FLAME parameters")
     _export(
         cfg=cfg_saved,
         src_folder=src_folder,
@@ -251,7 +255,7 @@ def main(
         epoch=epoch,
     )
 
-    print("\nPipeline complete!")
+    print("\n>>> Pipeline complete!")
 
 
 if __name__ == "__main__":
