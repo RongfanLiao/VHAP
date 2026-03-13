@@ -141,6 +141,9 @@ dmypy.json
 # PyTest
 .pytest_cache
 
+# symlinks
+data
+
 # project specific files
 deps/InsightFace-PyTorch
 **/.idea/*
@@ -155,3 +158,7 @@ output/
 export/
 /data/
 .claude/
+
+*.pdf
+*.zip
+*.gif

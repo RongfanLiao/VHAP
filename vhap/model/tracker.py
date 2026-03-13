@@ -814,12 +814,21 @@ class FlameTracker:
         with open(obj_path, 'w') as f:
             f.write(get_obj_content(vertices, faces, uv_coordinates, uv_indices, mtl_path.name))
     
+    _async_semaphore = threading.Semaphore(4)  # limit concurrent async threads
+
     def async_func(func):
-        """Decorator to run a function asynchronously"""
+        """Decorator to run a function asynchronously with bounded concurrency"""
+        def _thread_target(semaphore, *args, **kwargs):
+            try:
+                func(*args, **kwargs)
+            finally:
+                semaphore.release()
+
         def wrapper(*args, **kwargs):
             self = args[0]
             if self.cfg.async_func:
-                thread = threading.Thread(target=func, args=args, kwargs=kwargs)
+                self._async_semaphore.acquire()  # blocks if 4 threads already running
+                thread = threading.Thread(target=_thread_target, args=(self._async_semaphore, *args), kwargs=kwargs)
                 thread.start()
             else:
                 func(*args, **kwargs)
@@ -1350,10 +1359,10 @@ class GlobalTracker(FlameTracker):
         # sequential optimization of timesteps
         self.logger.info(f"Start sequential tracking FLAME in {self.n_timesteps} frames")
         dataloader = DataLoader(
-            self.dataset, 
-            batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None, 
-            shuffle=False, 
-            num_workers=4
+            self.dataset,
+            batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
+            shuffle=False,
+            num_workers=0
         )
         for sample in dataloader:
             if sample["timestep_index"][0].item() == 0:
@@ -1376,10 +1385,10 @@ class GlobalTracker(FlameTracker):
         self.logger.info(f"Start global optimization of all frames")
         # global optimization with random sampling
         dataloader = DataLoader(
-            self.dataset, 
-            batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None, 
-            shuffle=True, 
-            num_workers=4
+            self.dataset,
+            batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
+            shuffle=True,
+            num_workers=0
         )
         if self.cfg.exp.photometric:
             self.optimize_stage(stage='rgb_global_tracking', dataloader=dataloader, lr_scale=0.1)
