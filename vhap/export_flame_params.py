@@ -44,6 +44,10 @@ from vhap.export_as_nerf_dataset import (
 )
 
 
+def _identity(x):
+    return x
+
+
 class FLAMEParamDatasetWriter:
     """Export camera transforms, canonical FLAME params, and a single all-frame FLAME param file.
 
@@ -80,14 +84,14 @@ class FLAMEParamDatasetWriter:
         print(tyro.to_yaml(cfg_data))
 
         cfg_data.target_extrinsic_type = "c2w"
-        cfg_data.background_color = "white"
+        cfg_data.background_color = None
         cfg_data.use_alpha_map = False
         dataset = import_module(cfg_data._target)(cfg=cfg_data, batchify_all_views=False)
         self.dataloader = DataLoader(
             dataset,
             shuffle=False,
             batch_size=None,
-            collate_fn=lambda x: x,
+            collate_fn=_identity,
             num_workers=min(multiprocessing.cpu_count(), 8),
         )
 

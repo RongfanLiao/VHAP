@@ -85,6 +85,9 @@ class VideoDataset(Dataset):
     
     def match_sequences(self):
         logger.info(f"Looking for sequence '{self.cfg.sequence}' at {self.cfg.root_folder}")
+        exact = self.cfg.root_folder / self.cfg.sequence
+        if exact.is_dir():
+            return [exact]
         return list(filter(lambda x: x.is_dir(), self.cfg.root_folder.glob(f"{self.cfg.sequence}*")))
     
     def define_properties(self):

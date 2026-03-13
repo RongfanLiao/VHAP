@@ -1272,6 +1272,8 @@ class GlobalTracker(FlameTracker):
     def detect_landmarks(self, cfg):
         cfg_data = deepcopy(cfg.data)
         cfg_data.use_landmark = False
+        cfg_data.use_alpha_map = False
+        cfg_data.background_color = None
         dataset = import_module(cfg.data._target)(cfg=cfg_data, batchify_all_views=False)
 
         if cfg.data.landmark_source == 'face-alignment':

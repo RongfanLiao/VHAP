@@ -128,7 +128,7 @@ def _build_tracking_config(
         A fully-initialised tracking configuration.
     """
     return BaseTrackingConfig(
-        data=DataConfig(root_folder=root_folder, sequence=sequence),
+        data=DataConfig(root_folder=root_folder, sequence=sequence, background_color=None),
         model=ModelConfig(),
         render=RenderConfig(),
         log=LogConfig(),
@@ -139,12 +139,12 @@ def _build_tracking_config(
             lmk_init_rigid=StageLmkInitRigidConfig(),
             lmk_init_all=StageLmkInitAllConfig(),
             lmk_sequential_tracking=StageLmkSequentialTrackingConfig(),
-            lmk_global_tracking=StageLmkGlobalTrackingConfig(),
+            lmk_global_tracking=StageLmkGlobalTrackingConfig(num_epochs=1),
             rgb_init_texture=StageRgbInitTextureConfig(),
             rgb_init_all=StageRgbInitAllConfig(),
             rgb_init_offset=StageRgbInitOffsetConfig(),
             rgb_sequential_tracking=StageRgbSequentialTrackingConfig(),
-            rgb_global_tracking=StageRgbGlobalTrackingConfig(),
+            rgb_global_tracking=StageRgbGlobalTrackingConfig(num_epochs=1),
         ),
         device=device,
         batch_size=batch_size,
@@ -227,8 +227,10 @@ def main(
     # ------------------------------------------------------------------
     # Step 2: Track — FLAME optimisation
     # ------------------------------------------------------------------
+    if output_folder is None:
+        output_folder = Path("output") / root_folder / f"{sequence}"
     if export_output_folder is None:
-       export_output_folder = output_folder / "exported"
+       export_output_folder = Path("export") / root_folder / f"{sequence}"
     print("\n>>> Step 2/3: FLAME tracking")
     cfg = _build_tracking_config(
         root_folder=root_folder,
