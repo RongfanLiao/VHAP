@@ -7,11 +7,10 @@ from PIL import Image
 import torch
 from vhap.data.image_folder_dataset import ImageFolderDataset
 from torch.utils.data import DataLoader
-from BackgroundMattingV2.model import MattingRefine
-from BackgroundMattingV2.asset import get_weights_path
 
 
-def video2frames(video_path: Path, image_dir: Path, keep_video_name: bool=False, target_fps: int=30, n_downsample: int=1):
+def video2frames(video_path: Path, image_dir: Path, keep_video_name: bool=False,
+ target_fps: int=30, n_downsample: int=1):
     print(f'Converting video {video_path} to frames with downsample scale {n_downsample}')
     if not image_dir.exists():
         image_dir.mkdir(parents=True)
@@ -85,54 +84,6 @@ def robust_video_matting(image_dir: Path, N_warmup: Optional[int]=10):
             Path(alpha_path).parent.mkdir(parents=True)
         alpha.save(alpha_path)
 
-def background_matting_v2(
-        image_dir: Path,
-        background_folder: Path=Path('../../BACKGROUND'),
-        model_backbone: Literal['resnet101', 'resnet50', 'mobilenetv2']='resnet101',
-        model_backbone_scale: float=0.25,
-        model_refine_mode: Literal['full', 'sampling', 'thresholding']='thresholding',
-        model_refine_sample_pixels: int=80_000,
-        model_refine_threshold: float=0.01,
-        model_refine_kernel_size: int=3,
-    ):
-    model = MattingRefine(
-        model_backbone,
-        model_backbone_scale,
-        model_refine_mode,
-        model_refine_sample_pixels,
-        model_refine_threshold,
-        model_refine_kernel_size
-    )
-
-    weights_path = get_weights_path(model_backbone)
-
-    model = model.cuda().eval()
-    model.load_state_dict(torch.load(weights_path, map_location='cuda', weights_only=True))
-
-    dataset = ImageFolderDataset(
-        image_folder=image_dir, 
-        background_folder=background_folder,
-        background_fname2camId=lambda x: x.split('.')[0].split('_')[1],  # image_00001.jpg -> 00001
-        image_fname2camId=lambda x: x.split('.')[0].split('_')[1],       # cam_00001.jpg -> 00001
-    )
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
-
-    for item in tqdm(dataloader):
-        src = item['rgb']
-        bgr = item['background']
-        src = src.permute(0, 3, 1, 2).float().cuda() / 255
-        bgr = bgr.permute(0, 3, 1, 2).float().cuda() / 255
-
-        with torch.no_grad():
-            pha, fgr, _, _, err, ref = model(src, bgr)
-
-        alpha = (pha[0, 0] * 255).cpu().numpy()
-        alpha = Image.fromarray(alpha.astype('uint8'))
-        alpha_path = item['image_path'][0].replace('images', 'alpha_maps')
-        if not Path(alpha_path).parent.exists():
-            Path(alpha_path).parent.mkdir(parents=True)
-        alpha.save(alpha_path)
-
 def downsample_frames(image_dir: Path, n_downsample: int):
     print(f'Downsample frames in {image_dir} by {n_downsample}')
     assert n_downsample in [2, 4, 8]
@@ -149,7 +100,7 @@ def main(
         input: Path, 
         target_fps: int=25, 
         downsample_scales: List[int]=[],
-        matting_method: Optional[Literal['robust_video_matting', 'background_matting_v2']]=None,
+        matting_method: Optional[Literal['robust_video_matting']]=None,
         background_folder: Path=Path('../../BACKGROUND'),
     ):
     if not input.exists():
@@ -186,8 +137,6 @@ def main(
     # foreground matting
     if matting_method == 'robust_video_matting':
         robust_video_matting(image_dir)
-    elif matting_method == 'background_matting_v2':
-        background_matting_v2(image_dir, background_folder=background_folder)
     elif matting_method is not None:
         raise ValueError(f'Unknown matting method: {matting_method}')
 

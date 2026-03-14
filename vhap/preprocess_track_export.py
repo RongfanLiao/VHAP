@@ -61,7 +61,6 @@ from vhap.export_as_nerf_dataset import check_epoch, load_config
 from vhap.export_flame_params import FLAMEParamDatasetWriter
 from vhap.model.tracker import GlobalTracker
 from vhap.preprocess_video import (
-    background_matting_v2,
     robust_video_matting,
     video2frames,
 )
