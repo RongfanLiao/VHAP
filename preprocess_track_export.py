@@ -126,6 +126,8 @@ def _build_tracking_config(
     Returns:
         A fully-initialised tracking configuration.
     """
+    debug_num_steps = 50
+
     return BaseTrackingConfig(
         data=DataConfig(root_folder=root_folder, sequence=sequence, background_color=None),
         model=ModelConfig(),
@@ -135,13 +137,13 @@ def _build_tracking_config(
         lr=LearningRateConfig(),
         w=LossWeightConfig(),
         pipeline=PipelineConfig(
-            lmk_init_rigid=StageLmkInitRigidConfig(),
-            lmk_init_all=StageLmkInitAllConfig(),
+            lmk_init_rigid=StageLmkInitRigidConfig(num_steps=debug_num_steps),
+            lmk_init_all=StageLmkInitAllConfig(num_steps=debug_num_steps),
             lmk_sequential_tracking=StageLmkSequentialTrackingConfig(),
             lmk_global_tracking=StageLmkGlobalTrackingConfig(num_epochs=1),
-            rgb_init_texture=StageRgbInitTextureConfig(),
-            rgb_init_all=StageRgbInitAllConfig(),
-            rgb_init_offset=StageRgbInitOffsetConfig(),
+            rgb_init_texture=StageRgbInitTextureConfig(num_steps=debug_num_steps),
+            rgb_init_all=StageRgbInitAllConfig(num_steps=debug_num_steps),
+            rgb_init_offset=StageRgbInitOffsetConfig(num_steps=debug_num_steps),
             rgb_sequential_tracking=StageRgbSequentialTrackingConfig(),
             rgb_global_tracking=StageRgbGlobalTrackingConfig(num_epochs=1),
         ),
