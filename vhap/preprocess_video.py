@@ -1,3 +1,4 @@
+from fractions import Fraction
 from pathlib import Path
 from tqdm import tqdm
 from typing import Literal, Optional, List
@@ -9,46 +10,117 @@ from vhap.data.image_folder_dataset import ImageFolderDataset
 from torch.utils.data import DataLoader
 
 
-def video2frames(video_path: Path, image_dir: Path, keep_video_name: bool=False,
- target_fps: int=30, n_downsample: int=1):
-    print(f'Converting video {video_path} to frames with downsample scale {n_downsample}')
-    if not image_dir.exists():
-        image_dir.mkdir(parents=True)
-    
-    file_path_stem = video_path.stem + '_' if keep_video_name else ''
+def _parse_ffmpeg_ratio(value: str) -> float:
+    """Parse an ffmpeg ratio string such as ``'30000/1001'``."""
+    try:
+        return float(Fraction(value))
+    except (ValueError, ZeroDivisionError):
+        return 0.0
 
+
+def _probe_video_stream(video_path: Path) -> dict:
+    """Probe a video file and return its video stream metadata."""
     probe = ffmpeg.probe(str(video_path))
-    
-    video_fps = int(probe['streams'][0]['r_frame_rate'].split('/')[0])
-    if  video_fps ==0:
-        video_fps = int(probe['streams'][0]['avg_frame_rate'].split('/')[0])
-        if video_fps == 0:
-            # nb_frames / duration
-            video_fps = int(probe['streams'][0]['nb_frames']) / float(probe['streams'][0]['duration'])
-            if video_fps == 0:
-                raise ValueError('Cannot get valid video fps')
-
-    num_frames = int(probe['streams'][0]['nb_frames'])
-    video = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-    W = int(video['width'])
-    H = int(video['height'])
-    w = W // n_downsample
-    h = H // n_downsample
-    print(f'[Video]  FPS: {video_fps} | number of frames: {num_frames} | resolution: {W}x{H}')
-    print(f'[Target] FPS: {target_fps} | number of frames: {round(num_frames * target_fps / int(video_fps))} | resolution: {w}x{h}')
-
-    (ffmpeg
-    .input(str(video_path))
-    .filter('fps', fps=f'{target_fps}')
-    .filter('scale', width=w, height=h)
-    .output(
-        str(image_dir / f'{file_path_stem}%06d.jpg'),
-        start_number=0,
-        qscale=1,  # lower values mean higher quality (1 is the best, 31 is the worst).
+    video_stream = next(
+        (stream for stream in probe['streams'] if stream.get('codec_type') == 'video'),
+        None,
     )
-    .overwrite_output()
-    .run(quiet=True)
+    if video_stream is None:
+        raise ValueError('No video stream found')
+    return video_stream
+
+
+def _infer_video_fps(video_stream: dict) -> float:
+    """Infer the source frame rate from ffprobe metadata."""
+    source_fps = _parse_ffmpeg_ratio(video_stream.get('r_frame_rate', '0/1'))
+    if source_fps > 0:
+        return source_fps
+
+    source_fps = _parse_ffmpeg_ratio(video_stream.get('avg_frame_rate', '0/1'))
+    if source_fps > 0:
+        return source_fps
+
+    source_fps = int(video_stream['nb_frames']) / float(video_stream['duration'])
+    if source_fps > 0:
+        return source_fps
+
+    raise ValueError('Cannot get valid video fps')
+
+
+def video2frames(
+    video_path: Path,
+    image_dir: Path,
+    keep_video_name: bool = False,
+    target_fps: int = 30,
+    n_downsample: int = 1,
+) -> None:
+    """Extract frames from a video file.
+
+    Parameters
+    ----------
+    video_path : Path
+        Path to the source video.
+    image_dir : Path
+        Directory where extracted JPEG frames are written.
+    keep_video_name : bool, default=False
+        Whether to prefix each frame name with the input video stem.
+    target_fps : int, default=30
+        Frame rate used for extraction.
+    n_downsample : int, default=1
+        Spatial downsampling factor applied to both width and height.
+
+    Raises
+    ------
+    ValueError
+        If the input video does not contain a valid video stream or frame rate.
+    """
+    if target_fps <= 0:
+        raise ValueError(f'target_fps must be positive, got {target_fps}')
+    if n_downsample <= 0:
+        raise ValueError(f'n_downsample must be positive, got {n_downsample}')
+
+    print(f'Converting video {video_path} to frames with downsample scale {n_downsample}')
+    image_dir.mkdir(parents=True, exist_ok=True)
+
+    video_stream = _probe_video_stream(video_path)
+    source_fps = _infer_video_fps(video_stream)
+
+    source_num_frames = int(video_stream['nb_frames'])
+    source_width, source_height = (
+        int(video_stream['width']),
+        int(video_stream['height']),
     )
+
+    output_width, output_height = (
+        source_width // n_downsample,
+        source_height // n_downsample,
+    )
+    estimated_output_frames = round(source_num_frames * target_fps / source_fps)
+
+    print(
+        f'[Video]  FPS: {source_fps} | number of frames: {source_num_frames} '
+        f'| resolution: {source_width}x{source_height}'
+    )
+    print(
+        f'[Target] FPS: {target_fps} | number of frames: {estimated_output_frames} '
+        f'| resolution: {output_width}x{output_height}'
+    )
+
+    output_file_prefix = f'{video_path.stem}_' if keep_video_name else ''
+    (
+        ffmpeg
+        .input(str(video_path))
+        .filter('fps', fps=f'{target_fps}')
+        .filter('scale', width=output_width, height=output_height)
+        .output(
+            str(image_dir / f'{output_file_prefix}%06d.jpg'),
+            start_number=0,
+            qscale=1,  # lower values mean higher quality (1 is the best, 31 is the worst).
+        )
+        .overwrite_output()
+        .run(quiet=True)
+    )
+
 
 def robust_video_matting(image_dir: Path, N_warmup: Optional[int]=10):
     print(f'Running robust video matting on images in {image_dir}')
