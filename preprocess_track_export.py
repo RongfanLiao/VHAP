@@ -58,6 +58,9 @@ from vhap.config.base import (
     StageRgbSequentialTrackingConfig,
 )
 from vhap.export_as_nerf_dataset import check_epoch, load_config
+from vhap.util.log import get_logger
+
+logger = get_logger(__name__, root=True)
 from vhap.export_flame_params import FLAMEParamDatasetWriter
 from vhap.model.tracker import GlobalTracker, detect_landmarks
 from vhap.preprocess_video import (
@@ -221,7 +224,7 @@ def main(
     # ------------------------------------------------------------------
     # Step 1: Preprocess — extract frames from video
     # ------------------------------------------------------------------
-    print("\n>>> Step 1/3: Preprocessing video")
+    logger.info("Step 1/3: Preprocessing video")
     # root_folder, sequence, _ = _preprocess(
     #     input_path=input,
     #     target_fps=target_fps,
@@ -253,7 +256,7 @@ def main(
     # ------------------------------------------------------------------
     # Step 2: Track — FLAME optimisation
     # ------------------------------------------------------------------
-    print("\n>>> Step 2/3: FLAME tracking")
+    logger.info("Step 2/3: FLAME tracking")
       
     tracker = GlobalTracker(cfg)
     tracker.optimize()
@@ -265,7 +268,7 @@ def main(
     # ------------------------------------------------------------------
     # Step 3: Export — lightweight FLAME parameter dataset
     # ------------------------------------------------------------------
-    print("\n>>> Step 3/3: Exporting FLAME parameters")
+    logger.info("Step 3/3: Exporting FLAME parameters")
     _export(
         cfg=cfg_saved,
         src_folder=src_folder,
@@ -273,7 +276,7 @@ def main(
         epoch=epoch,
     )
 
-    print("\n>>> Pipeline complete!")
+    logger.info("Pipeline complete!")
 
 
 if __name__ == "__main__":
