@@ -198,6 +198,19 @@ class VideoDataset(Dataset):
 
         return self.camera_params
 
+    @property
+    def image_size(self):
+        """Return (H, W) of the images after applying scale_factor."""
+        if not hasattr(self, '_image_size'):
+            rgb_path = self.get_property_path("rgb", 0)
+            img = Image.open(rgb_path)
+            W, H = img.size
+            if self.cfg.scale_factor < 1.0:
+                H = int(H * self.cfg.scale_factor)
+                W = int(W * self.cfg.scale_factor)
+            self._image_size = (H, W)
+        return self._image_size
+
     def __len__(self):
         if self.batchify_all_views:
             return self.num_timesteps

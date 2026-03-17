@@ -1263,10 +1263,10 @@ class GlobalTracker(FlameTracker):
 
         config_yaml_path = out_dir / 'config.yml'
         config_yaml_path.write_text(yaml.dump(cfg), "utf8")
-        print(tyro.to_yaml(cfg))
+        # print(tyro.to_yaml(cfg))
 
         self.logger = get_logger(__name__, root=True, log_dir=out_dir)
-
+        # self.logger.info(tyro.to_yaml(cfg))
         # data
         self.dataset = import_module(cfg.data._target)(
             cfg=cfg.data,
@@ -1274,8 +1274,8 @@ class GlobalTracker(FlameTracker):
         )
         # FlameTracker expects all views of a frame in a batch, which is undertaken by the
         # dataset. Therefore batching is disabled for the dataloader
-
-        self.image_size = self.dataset[0]["rgb"].shape[-2:]
+        # self.image_size = self.dataset[0]["rgb"].shape[-2:]
+        self.image_size = self.dataset.image_size
         self.n_timesteps = len(self.dataset)
 
         # parameters
