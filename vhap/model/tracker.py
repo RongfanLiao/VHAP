@@ -1260,7 +1260,7 @@ class GlobalTracker(FlameTracker):
         
         self.log_interval_scalar = self.cfg.log.interval_scalar
         self.log_interval_media = self.cfg.log.interval_media
-
+        # save config
         config_yaml_path = out_dir / 'config.yml'
         config_yaml_path.write_text(yaml.dump(cfg), "utf8")
         # print(tyro.to_yaml(cfg))
@@ -1272,8 +1272,6 @@ class GlobalTracker(FlameTracker):
             cfg=cfg.data,
             img_to_tensor=True,
         )
-        # FlameTracker expects all views of a frame in a batch, which is undertaken by the
-        # dataset. Therefore batching is disabled for the dataloader
         # self.image_size = self.dataset[0]["rgb"].shape[-2:]
         self.image_size = self.dataset.image_size
         self.n_timesteps = len(self.dataset)
@@ -1284,69 +1282,56 @@ class GlobalTracker(FlameTracker):
         if self.cfg.model.flame_params_path is not None:
             self.load_from_tracked_flame_params(self.cfg.model.flame_params_path)
 
+    def _param(self, *size, requires_grad=True):
+        """Create a zero tensor on self.device, optionally trainable."""
+        return torch.zeros(*size, device=self.device, requires_grad=requires_grad)
+
     def init_params(self):
-        train_tensors = []
+        # FLAME shape & expression
+        self.shape = self._param(self.cfg.model.n_shape)
+        self.expr = self._param(self.n_timesteps, self.cfg.model.n_expr)
 
-        # flame model params
-        self.shape = torch.zeros(self.cfg.model.n_shape).to(self.device)
-        self.expr = torch.zeros(self.n_timesteps, self.cfg.model.n_expr).to(self.device)
+        # Joint axis angles
+        self.neck_pose = self._param(self.n_timesteps, 3)
+        self.jaw_pose = self._param(self.n_timesteps, 3)
+        self.eyes_pose = self._param(self.n_timesteps, 6)
 
-        # joint axis angles
-        self.neck_pose = torch.zeros(self.n_timesteps, 3).to(self.device)
-        self.jaw_pose = torch.zeros(self.n_timesteps, 3).to(self.device)
-        self.eyes_pose = torch.zeros(self.n_timesteps, 6).to(self.device)
+        # Rigid pose
+        self.translation = self._param(self.n_timesteps, 3)
+        self.rotation = self._param(self.n_timesteps, 3)
 
-        # rigid pose
-        self.translation = torch.zeros(self.n_timesteps, 3).to(self.device)
-        self.rotation = torch.zeros(self.n_timesteps, 3).to(self.device)
-
-        # texture and lighting params
-        self.tex_pca = torch.zeros(self.cfg.model.n_tex).to(self.device)
+        # Texture
+        self.tex_pca = self._param(
+            self.cfg.model.n_tex, requires_grad=not self.cfg.model.tex_painted)
         if self.cfg.model.tex_extra:
             res = self.cfg.model.tex_resolution
-            self.tex_extra = torch.zeros(3, res, res).to(self.device)
-        
+            self.tex_extra = self._param(3, res, res)
+
+        # Lighting
         if self.cfg.render.lighting_type == 'SH':
-            self.lights_uniform = torch.zeros(9, 3).to(self.device)
-            self.lights_uniform[0] = torch.tensor([np.sqrt(4 * np.pi)]).expand(3).float().to(self.device)
-            self.lights = self.lights_uniform.clone()
+            self.lights_uniform = torch.zeros(9, 3, device=self.device)
+            self.lights_uniform[0] = torch.tensor([np.sqrt(4 * np.pi)]).expand(3).float()
+            self.lights = self.lights_uniform.clone().requires_grad_(True)
         else:
             self.lights = None
 
-        train_tensors += (
-            [self.shape, self.translation, self.rotation, self.neck_pose, self.jaw_pose, self.eyes_pose, self.expr,]
+        # Offsets
+        n_verts = self.flame.v_template.shape[0]
+        self.static_offset = (
+            self._param(1, n_verts, 3) 
+            if self.cfg.model.use_static_offset else None
+        )
+        self.dynamic_offset = (
+            self._param(self.n_timesteps, n_verts, 3)
+            if self.cfg.model.use_dynamic_offset else None
         )
 
-        if not self.cfg.model.tex_painted:
-            train_tensors += [self.tex_pca]
-        if self.cfg.model.tex_extra:
-            train_tensors += [self.tex_extra]
-
-        if self.lights is not None:
-            train_tensors += [self.lights]
-
-        if self.cfg.model.use_static_offset:
-            self.static_offset = torch.zeros(1, self.flame.v_template.shape[0], 3).to(self.device)
-            train_tensors += [self.static_offset]
-        else:
-            self.static_offset = None
-        
-        if self.cfg.model.use_dynamic_offset:
-            self.dynamic_offset = torch.zeros(self.n_timesteps, self.flame.v_template.shape[0], 3).to(self.device)
-            train_tensors += self.dynamic_offset
-        else:
-            self.dynamic_offset = None
-
-        # camera definition
+        # Camera (uncalibrated)
         if not self.calibrated:
-            # K contains focal length and principle point
-            self.focal_length = torch.tensor([1.5]).to(self.device)
-            self.RT = torch.eye(3, 4).to(self.device)
+            self.focal_length = torch.tensor(
+                [1.5], device=self.device, requires_grad=True)
+            self.RT = torch.eye(3, 4, device=self.device)
             self.RT[2, 3] = -1  # (0, 0, -1) in w2c corresponds to (0, 0, 1) in c2w
-            train_tensors += [self.focal_length]
-
-        for t in train_tensors:
-            t.requires_grad = True
 
     def optimize(self):
         """
