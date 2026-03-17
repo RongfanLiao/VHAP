@@ -59,7 +59,7 @@ from vhap.config.base import (
 )
 from vhap.export_as_nerf_dataset import check_epoch, load_config
 from vhap.export_flame_params import FLAMEParamDatasetWriter
-from vhap.model.tracker import GlobalTracker
+from vhap.model.tracker import GlobalTracker, detect_landmarks
 from vhap.preprocess_video import (
     robust_video_matting,
     video2frames,
@@ -202,7 +202,7 @@ def main(
     ] = None,
     # --- Track ---
     device: Literal["cuda", "cpu"] = "cuda",
-    batch_size: int = 16,
+    batch_size: int = 32,
     # --- Export ---
     epoch: int = -1,
 ) -> None:
@@ -231,21 +231,13 @@ def main(
     assert input.suffix in (".mov", ".mp4"), (
         f"Expected a video file (.mov/.mp4), got: {input}"
     )
-
     root_folder, sequence = input.parent, input.stem
     image_dir = root_folder / sequence / "images"
-    video2frames(input, image_dir, target_fps=target_fps)
-
-    # ------------------------------------------------------------------
-    # Step 2: Track — FLAME optimisation
-    # ------------------------------------------------------------------
-    print("\n>>> Step 2/3: FLAME tracking")
-
     if output_folder is None:
         output_folder = Path("output") / root_folder / f"{sequence}"
     if export_output_folder is None:
-       export_output_folder = Path("export") / root_folder / f"{sequence}"
-       
+        export_output_folder = Path("export") / root_folder / f"{sequence}"
+
     cfg = _build_tracking_config(
         root_folder=root_folder,
         sequence=sequence,
@@ -253,6 +245,16 @@ def main(
         device=device,
         batch_size=batch_size,
     )
+
+    video2frames(input, image_dir, target_fps=target_fps)
+    detect_landmarks(cfg)
+
+
+    # ------------------------------------------------------------------
+    # Step 2: Track — FLAME optimisation
+    # ------------------------------------------------------------------
+    print("\n>>> Step 2/3: FLAME tracking")
+      
     tracker = GlobalTracker(cfg)
     tracker.optimize()
 

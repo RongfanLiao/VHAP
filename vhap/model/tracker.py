@@ -1227,14 +1227,29 @@ class FlameTracker:
         np.savez(self.out_dir / f'{fname}.npz', **export_dict)
 
 
+def detect_landmarks(cfg):
+    cfg_data = deepcopy(cfg.data)
+    cfg_data.use_landmark = False
+    dataset = import_module(cfg.data._target)(cfg=cfg_data, batchify_all_views=False)
+
+    if cfg.data.landmark_source == 'face-alignment':
+        if not cfg.exp.reuse_landmarks or not dataset.get_property_path("landmark2d/face-alignment", -1).exists():
+            from vhap.util.landmark_detector_fa import annotate_landmarks
+            annotate_landmarks(dataset, n_jobs=cfg.data.landmark_detector_njobs)
+    elif cfg.data.landmark_source == 'star':
+        if not cfg.exp.reuse_landmarks or not dataset.get_property_path("landmark2d/STAR", -1).exists():
+            from vhap.util.landmark_detector_star import annotate_landmarks
+            annotate_landmarks(dataset, n_jobs=cfg.data.landmark_detector_njobs)
+    else:
+        raise ValueError(f"Unknown landmark source: {cfg.data.landmark_source}")
+
+
 class GlobalTracker(FlameTracker):
     def __init__(self, cfg: BaseTrackingConfig):
         super().__init__(cfg)
 
         self.calibrated = cfg.data.calibrated
-
-        self.detect_landmarks(cfg)
-
+        # detect_landmarks(cfg)
         # logging
         out_dir = cfg.exp.output_folder / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         out_dir.mkdir(parents=True)
@@ -1269,22 +1284,6 @@ class GlobalTracker(FlameTracker):
         if self.cfg.model.flame_params_path is not None:
             self.load_from_tracked_flame_params(self.cfg.model.flame_params_path)
 
-    def detect_landmarks(self, cfg):
-        cfg_data = deepcopy(cfg.data)
-        cfg_data.use_landmark = False
-        dataset = import_module(cfg.data._target)(cfg=cfg_data, batchify_all_views=False)
-
-        if cfg.data.landmark_source == 'face-alignment':
-            if not cfg.exp.reuse_landmarks or not dataset.get_property_path("landmark2d/face-alignment", -1).exists():
-                from vhap.util.landmark_detector_fa import annotate_landmarks
-                annotate_landmarks(dataset, n_jobs=cfg.data.landmark_detector_njobs)
-        elif cfg.data.landmark_source == 'star':
-            if not cfg.exp.reuse_landmarks or not dataset.get_property_path("landmark2d/STAR", -1).exists():
-                from vhap.util.landmark_detector_star import annotate_landmarks
-                annotate_landmarks(dataset, n_jobs=cfg.data.landmark_detector_njobs)
-        else:
-            raise ValueError(f"Unknown landmark source: {cfg.data.landmark_source}")
-    
     def init_params(self):
         train_tensors = []
 
