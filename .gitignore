@@ -142,7 +142,7 @@ dmypy.json
 .pytest_cache
 
 # symlinks
-data
+/data
 
 # project specific files
 deps/InsightFace-PyTorch

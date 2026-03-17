@@ -59,7 +59,8 @@ class VideoDataset(Dataset):
         # timesteps
         self.timestep_ids = set(
             f.split('.')[0].split('_')[-1]
-            for f in os.listdir(self.sequence_path / self.properties['rgb']['folder']) if f.endswith(self.properties['rgb']['suffix'])
+            for f in os.listdir(self.sequence_path / self.properties['rgb']['folder']) 
+            if f.endswith(self.properties['rgb']['suffix'])
         )
         self.timestep_ids = sorted(self.timestep_ids)
         self.timestep_indices = list(range(len(self.timestep_ids)))
