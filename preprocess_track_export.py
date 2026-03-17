@@ -102,7 +102,10 @@ def _preprocess(
     if matting_method == "robust_video_matting":
         robust_video_matting(image_dir)
     elif matting_method == "background_matting_v2":
-        background_matting_v2(image_dir)
+        # background_matting_v2(image_dir)
+        raise NotImplementedError(
+            "BackgroundMattingV2 integration is not implemented yet."
+        )
 
     return root_folder, sequence, image_dir
 
@@ -193,7 +196,7 @@ def main(
     output_folder: Annotated[Path, arg(aliases=["-t"])] = None,
     export_output_folder: Annotated[Path, arg(aliases=["-e"])] = None,
     # --- Preprocess ---
-    target_fps: int = 25,
+    target_fps: int = 30,
     matting_method: Optional[
         Literal["robust_video_matting", "background_matting_v2"]
     ] = None,
@@ -219,20 +222,30 @@ def main(
     # Step 1: Preprocess — extract frames from video
     # ------------------------------------------------------------------
     print("\n>>> Step 1/3: Preprocessing video")
-    root_folder, sequence, _ = _preprocess(
-        input_path=input,
-        target_fps=target_fps,
-        matting_method=matting_method,
+    # root_folder, sequence, _ = _preprocess(
+    #     input_path=input,
+    #     target_fps=target_fps,
+    #     matting_method=matting_method,
+    # )
+
+    assert input.suffix in (".mov", ".mp4"), (
+        f"Expected a video file (.mov/.mp4), got: {input}"
     )
+
+    root_folder, sequence = input.parent, input.stem
+    image_dir = root_folder / sequence / "images"
+    video2frames(input, image_dir, target_fps=target_fps)
 
     # ------------------------------------------------------------------
     # Step 2: Track — FLAME optimisation
     # ------------------------------------------------------------------
+    print("\n>>> Step 2/3: FLAME tracking")
+
     if output_folder is None:
         output_folder = Path("output") / root_folder / f"{sequence}"
     if export_output_folder is None:
        export_output_folder = Path("export") / root_folder / f"{sequence}"
-    print("\n>>> Step 2/3: FLAME tracking")
+       
     cfg = _build_tracking_config(
         root_folder=root_folder,
         sequence=sequence,

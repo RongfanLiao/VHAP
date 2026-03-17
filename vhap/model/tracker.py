@@ -1272,8 +1272,6 @@ class GlobalTracker(FlameTracker):
     def detect_landmarks(self, cfg):
         cfg_data = deepcopy(cfg.data)
         cfg_data.use_landmark = False
-        cfg_data.use_alpha_map = False
-        cfg_data.background_color = None
         dataset = import_module(cfg.data._target)(cfg=cfg_data, batchify_all_views=False)
 
         if cfg.data.landmark_source == 'face-alignment':
@@ -1381,6 +1379,7 @@ class GlobalTracker(FlameTracker):
             else:
                 self.optimize_stage('lmk_sequential_tracking', sample)
             self.initialize_next_timtestep(sample["timestep_index"])
+            # self.initialize_next_timestep(sample["timestep_index"])
         
         self.evaluate(make_visualization=True, epoch=0)
 
@@ -1412,7 +1411,7 @@ class GlobalTracker(FlameTracker):
         if sample is not None:
             num_steps = self.cfg.pipeline[stage].num_steps
             for step_i in range(num_steps):
-                self.optimize_iter(sample, optimizer, stage)
+                self.optimize_iter(sample, optimizer, stage, stage_step=step_i)
         else:
             assert dataloader is not None
             num_epochs = self.cfg.pipeline[stage].num_epochs
@@ -1426,7 +1425,7 @@ class GlobalTracker(FlameTracker):
                 if (epoch_i + 1) % 10 == 0:
                     self.evaluate(make_visualization=True, epoch=epoch_i+1)
     
-    def optimize_iter(self, sample, optimizer, stage):
+    def optimize_iter(self, sample, optimizer, stage, stage_step=None):
         # compute loss and update parameters
         self.clear_cache()
 
@@ -1453,7 +1452,7 @@ class GlobalTracker(FlameTracker):
                 timestep, 
                 session="train", 
                 stage=stage, 
-                frame_step=self.global_step, 
+                frame_step=stage_step if stage_step is not None else self.global_step, 
             )
 
         if (self.global_step+1) % self.log_interval_media == 0:
@@ -1467,11 +1466,10 @@ class GlobalTracker(FlameTracker):
                 timestep, 
                 session="train",
                 stage=stage,
-                frame_step=self.global_step,
+                frame_step=stage_step if stage_step is not None else self.global_step,
             )
         del verts, faces, lmks, albedos, output_dict
         self.global_step += 1
-
 
     def get_train_parameters(
         self, stage: Literal['lmk_init_rigid', 'lmk_init_all', 'rgb_init_all', 'rgb_init_offset', 'rgb_sequential_tracking', 'rgb_global_tracking'],
@@ -1538,3 +1536,43 @@ class GlobalTracker(FlameTracker):
                 self.expr[t_tgt].data.copy_(self.expr[t_src])
                 if self.cfg.model.use_dynamic_offset:
                     self.dynamic_offset[t_tgt].data.copy_(self.dynamic_offset[t_src])
+
+    def initialize_next_timestep(self, timesteps):
+        """Warm-start the next contiguous timestep block from the last solved frame.
+
+        Sequential tracking assumes nearby timesteps have similar pose and expression.
+        After optimizing the current block, this seeds the next block with the final
+        solved per-frame state so the following optimization starts close to a good
+        solution. Shared parameters such as shape, texture, lights, and static
+        offset are intentionally left unchanged.
+        """
+        src_timestep = int(timesteps[-1].item())
+        timestep_stride = src_timestep - int(timesteps[0].item()) + 1
+
+        # Mirror the current block width when seeding the next block. This keeps
+        # sequential warm starts consistent even when a batch contains multiple timesteps.
+        target_begin = src_timestep + 1
+        target_end = min(target_begin + timestep_stride, self.n_timesteps)
+        if target_begin >= target_end:
+            return
+
+        target_count = target_end - target_begin
+        # Only propagate per-frame state; shared variables are optimized separately.
+        state_tensors = [
+            self.translation,
+            self.rotation,
+            self.neck_pose,
+            self.jaw_pose,
+            self.eyes_pose,
+            self.expr,
+        ]
+        if self.cfg.model.use_dynamic_offset:
+            state_tensors.append(self.dynamic_offset)
+
+        with torch.no_grad():
+            for tensor in state_tensors:
+                source_state = tensor[src_timestep:src_timestep + 1]
+                # Use the last solved timestep as the initial guess for the whole
+                # next block because adjacent frames are expected to be similar.
+                repeated_state = source_state.repeat_interleave(target_count, dim=0)
+                tensor[target_begin:target_end].copy_(repeated_state)
