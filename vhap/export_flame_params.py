@@ -217,6 +217,14 @@ class FLAMEParamDatasetWriter:
                 "camera_angle_y": angle_y,
                 "transform_matrix": transform_matrix.tolist(),
             }
+            # Save first frame as foreground-only RGBA image
+            if item["timestep_index"] == 0 and "alpha_map" in item:
+                rgb = item["rgb"]  # (H, W, 3) uint8, already composited on white
+                # alpha = item["alpha_map"]  # (H, W) uint8
+                # rgba = np.concatenate([rgb, alpha[..., None]], axis=-1)  # (H, W, 4)
+                fg_preview_path = str(self.tgt_folder / "foreground_image.png")
+                write_data({fg_preview_path: rgb})
+
             db["frames"].append(frame_item)
 
         # Shared intrinsic params (for compatibility with other NeRF libraries)
@@ -261,15 +269,16 @@ class FLAMEParamDatasetWriter:
             "shape": self.flame_params["shape"],
             "expr": self.flame_params["expr"][ti_orig_list],
         }
-        if "static_offset" in self.flame_params:
-            params["static_offset"] = self.flame_params["static_offset"]
-        if "dynamic_offset" in self.flame_params:
-            params["dynamic_offset"] = self.flame_params["dynamic_offset"][ti_orig_list]
-        if "tex_extra" in self.flame_params:
-            params["tex_extra"] = self.flame_params["tex_extra"]
-        if "lights" in self.flame_params:
-            params["lights"] = self.flame_params["lights"]
-
+        # static_offset, dynamic_offset, tex_extra, lights are not needed
+        # by downstream LAM inference and are excluded to reduce file size.
+        # if "static_offset" in self.flame_params:
+        #     params["static_offset"] = self.flame_params["static_offset"]
+        # if "dynamic_offset" in self.flame_params:
+        #     params["dynamic_offset"] = self.flame_params["dynamic_offset"][ti_orig_list]
+        # if "tex_extra" in self.flame_params:
+        #     params["tex_extra"] = self.flame_params["tex_extra"]
+        # if "lights" in self.flame_params:
+        #     params["lights"] = self.flame_params["lights"]
         # Canonical (neutral-pose) parameters
         params["canonical_translation"] = np.zeros_like(self.flame_params["translation"][:1])
         params["canonical_rotation"] = np.zeros_like(self.flame_params["rotation"][:1])
