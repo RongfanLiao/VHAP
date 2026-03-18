@@ -1509,22 +1509,6 @@ class GlobalTracker(FlameTracker):
 
         return params
 
-    def initialize_next_timtestep(self, timesteps):
-        timestep_stride = timesteps[-1].item() - timesteps[0].item() + 1
-
-        t_src = timesteps[-1]
-        for s in range(timestep_stride):
-            t_tgt = t_src + s + 1
-            if t_tgt < self.n_timesteps - 1:
-                self.translation[t_tgt].data.copy_(self.translation[t_src])
-                self.rotation[t_tgt].data.copy_(self.rotation[t_src])
-                self.neck_pose[t_tgt].data.copy_(self.neck_pose[t_src])
-                self.jaw_pose[t_tgt].data.copy_(self.jaw_pose[t_src])
-                self.eyes_pose[t_tgt].data.copy_(self.eyes_pose[t_src])
-                self.expr[t_tgt].data.copy_(self.expr[t_src])
-                if self.cfg.model.use_dynamic_offset:
-                    self.dynamic_offset[t_tgt].data.copy_(self.dynamic_offset[t_src])
-
     def initialize_next_timestep(self, timesteps):
         """Warm-start the next contiguous timestep block from the last solved frame.
 
