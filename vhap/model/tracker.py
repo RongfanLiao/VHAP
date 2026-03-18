@@ -156,60 +156,6 @@ class FlameTracker:
             sample["intrinsic"] = torch.stack([f, f, cx, cy], dim=1)
             sample["extrinsic"] = self.RT[None, ...].expand(b, -1, -1)
 
-    def configure_optimizer(self, params, lr_scale=1.0):
-        """
-        Creates optimizer for the given set of parameters
-        :param params:
-        :return:
-        """
-        # copy dict because we will call 'pop'
-        params = params.copy()
-        param_groups = []
-        default_lr = self.cfg.lr.base
-
-        # dict map group name to param dict keys
-        group_def = {
-            "translation": ["translation"],
-            "expr": ["expr"],
-            "light": ["lights"],
-        }
-        if not self.calibrated:
-            group_def ["cam"] = ["cam"]
-        if self.cfg.model.use_static_offset:
-            group_def ["static_offset"] = ["static_offset"]
-        if self.cfg.model.use_dynamic_offset:
-            group_def ["dynamic_offset"] = ["dynamic_offset"]
-
-        # dict map group name to lr
-        group_lr = {
-            "translation": self.cfg.lr.translation,
-            "expr": self.cfg.lr.expr,
-            "light": self.cfg.lr.light,
-        }
-        if not self.calibrated:
-            group_lr["cam"] = self.cfg.lr.camera
-        if self.cfg.model.use_static_offset:
-            group_lr["static_offset"] = self.cfg.lr.static_offset
-        if self.cfg.model.use_dynamic_offset:
-            group_lr["dynamic_offset"] = self.cfg.lr.dynamic_offset
-
-        for group_name, param_keys in group_def.items():
-            selected = []
-            for p in param_keys:
-                if p in params:
-                    selected += params.pop(p)
-            if len(selected) > 0:
-                param_groups.append({"params": selected, "lr": group_lr[group_name] * lr_scale})
-
-        # create default group with remaining params
-        selected = []
-        for _, v in params.items():
-            selected += v
-        param_groups.append({"params": selected})
-
-        optim = torch.optim.Adam(param_groups, lr=default_lr * lr_scale)
-        return optim
-
     def forward_flame(self, timesteps):
         """
         Evaluates the flame model using the given parameters
@@ -1332,6 +1278,60 @@ class GlobalTracker(FlameTracker):
                 [1.5], device=self.device, requires_grad=True)
             self.RT = torch.eye(3, 4, device=self.device)
             self.RT[2, 3] = -1  # (0, 0, -1) in w2c corresponds to (0, 0, 1) in c2w
+
+    def configure_optimizer(self, params, lr_scale=1.0):
+        """
+        Creates optimizer for the given set of parameters
+        :param params:
+        :return:
+        """
+        # copy dict because we will call 'pop'
+        params = params.copy()
+        param_groups = []
+        default_lr = self.cfg.lr.base
+
+        # dict map group name to param dict keys
+        group_def = {
+            "translation": ["translation"],
+            "expr": ["expr"],
+            "light": ["lights"],
+        }
+        if not self.calibrated:
+            group_def ["cam"] = ["cam"]
+        if self.cfg.model.use_static_offset:
+            group_def ["static_offset"] = ["static_offset"]
+        if self.cfg.model.use_dynamic_offset:
+            group_def ["dynamic_offset"] = ["dynamic_offset"]
+
+        # dict map group name to lr
+        group_lr = {
+            "translation": self.cfg.lr.translation,
+            "expr": self.cfg.lr.expr,
+            "light": self.cfg.lr.light,
+        }
+        if not self.calibrated:
+            group_lr["cam"] = self.cfg.lr.camera
+        if self.cfg.model.use_static_offset:
+            group_lr["static_offset"] = self.cfg.lr.static_offset
+        if self.cfg.model.use_dynamic_offset:
+            group_lr["dynamic_offset"] = self.cfg.lr.dynamic_offset
+
+        for group_name, param_keys in group_def.items():
+            selected = []
+            for p in param_keys:
+                if p in params:
+                    selected += params.pop(p)
+            if len(selected) > 0:
+                param_groups.append({"params": selected, "lr": group_lr[group_name] * lr_scale})
+
+        # create default group with remaining params
+        selected = []
+        for _, v in params.items():
+            selected += v
+        param_groups.append({"params": selected})
+
+        optim = torch.optim.Adam(param_groups, lr=default_lr * lr_scale)
+        return optim
 
     def optimize(self):
         """
