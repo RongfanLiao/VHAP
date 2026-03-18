@@ -84,8 +84,8 @@ class FLAMEParamDatasetWriter:
         print(tyro.to_yaml(cfg_data))
 
         cfg_data.target_extrinsic_type = "c2w"
-        cfg_data.background_color = None
-        cfg_data.use_alpha_map = False
+        cfg_data.background_color = "white"
+        cfg_data.use_alpha_map = True
         dataset = import_module(cfg_data._target)(cfg=cfg_data, batchify_all_views=False)
         self.dataloader = DataLoader(
             dataset,

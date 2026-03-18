@@ -119,6 +119,8 @@ def _build_tracking_config(
     output_folder: Path,
     device: str,
     batch_size: int,
+    epoch: int = 30,
+    debug: bool = False,
 ) -> BaseTrackingConfig:
     """Construct a :class:`BaseTrackingConfig` with sensible defaults.
 
@@ -128,14 +130,22 @@ def _build_tracking_config(
         output_folder: Where to write tracking outputs.
         device: ``'cuda'`` or ``'cpu'``.
         batch_size: Number of frames per batch.
+        debug: If True, use minimal steps/epochs for quick testing.
 
     Returns:
         A fully-initialised tracking configuration.
     """
-    debug_num_steps = 50
+    if debug:
+        init_steps = 10
+        seq_steps = 5
+        n_epochs = 2
+    else:
+        init_steps = 500
+        seq_steps = 50
+        n_epochs = epoch
 
     return BaseTrackingConfig(
-        data=DataConfig(root_folder=root_folder, sequence=sequence, background_color=None),
+        data=DataConfig(root_folder=root_folder, sequence=sequence, background_color="white"),
         model=ModelConfig(),
         render=RenderConfig(),
         log=LogConfig(),
@@ -143,15 +153,15 @@ def _build_tracking_config(
         lr=LearningRateConfig(),
         w=LossWeightConfig(),
         pipeline=PipelineConfig(
-            lmk_init_rigid=StageLmkInitRigidConfig(num_steps=debug_num_steps),
-            lmk_init_all=StageLmkInitAllConfig(num_steps=debug_num_steps),
-            lmk_sequential_tracking=StageLmkSequentialTrackingConfig(),
-            lmk_global_tracking=StageLmkGlobalTrackingConfig(num_epochs=1),
-            rgb_init_texture=StageRgbInitTextureConfig(num_steps=debug_num_steps),
-            rgb_init_all=StageRgbInitAllConfig(num_steps=debug_num_steps),
-            rgb_init_offset=StageRgbInitOffsetConfig(num_steps=debug_num_steps),
-            rgb_sequential_tracking=StageRgbSequentialTrackingConfig(),
-            rgb_global_tracking=StageRgbGlobalTrackingConfig(num_epochs=1),
+            lmk_init_rigid=StageLmkInitRigidConfig(num_steps=init_steps),
+            lmk_init_all=StageLmkInitAllConfig(num_steps=init_steps),
+            lmk_sequential_tracking=StageLmkSequentialTrackingConfig(num_steps=seq_steps),
+            lmk_global_tracking=StageLmkGlobalTrackingConfig(num_epochs=n_epochs),
+            rgb_init_texture=StageRgbInitTextureConfig(num_steps=init_steps),
+            rgb_init_all=StageRgbInitAllConfig(num_steps=init_steps),
+            rgb_init_offset=StageRgbInitOffsetConfig(num_steps=init_steps),
+            rgb_sequential_tracking=StageRgbSequentialTrackingConfig(num_steps=seq_steps),
+            rgb_global_tracking=StageRgbGlobalTrackingConfig(num_epochs=n_epochs),
         ),
         device=device,
         batch_size=batch_size,
@@ -162,7 +172,7 @@ def _export(
     cfg: BaseTrackingConfig,
     src_folder: Path,
     tgt_folder: Path,
-    epoch: int,
+    epoch: int = -1,
 ) -> None:
     """Export tracked FLAME parameters using the tracking config directly.
 
@@ -172,7 +182,7 @@ def _export(
         tgt_folder: Target folder for the exported dataset.
         epoch: Which epoch to export (``-1`` for latest).
     """
-    check_epoch(src_folder, epoch)
+    # check_epoch(src_folder, epoch)
 
     if epoch != -1:
         tgt_folder = Path(str(tgt_folder) + f"_epoch{epoch}")
@@ -202,12 +212,14 @@ def main(
     target_fps: int = 30,
     matting_method: Optional[
         Literal["robust_video_matting", "background_matting_v2"]
-    ] = None,
+    ] = "robust_video_matting",
     # --- Track ---
     device: Literal["cuda", "cpu"] = "cuda",
-    batch_size: int = 32,
+    batch_size: int = 64,
     # --- Export ---
-    epoch: int = -1,
+    epoch: int = 30,
+    # --- Debug ---
+    debug: bool = True,
 ) -> None:
     """Run the full preprocess -> track -> export pipeline.
 
@@ -247,9 +259,19 @@ def main(
         output_folder=output_folder,
         device=device,
         batch_size=batch_size,
+        epoch=epoch,
+        debug=debug,
     )
 
     video2frames(input, image_dir, target_fps=target_fps)
+
+    if matting_method == "robust_video_matting":
+        robust_video_matting(image_dir)
+    if matting_method == "background_matting_v2":
+        raise NotImplementedError(
+            "BackgroundMattingV2 integration is not implemented yet."
+        )
+
     detect_landmarks(cfg)
 
 
@@ -273,7 +295,6 @@ def main(
         cfg=cfg_saved,
         src_folder=src_folder,
         tgt_folder=export_output_folder,
-        epoch=epoch,
     )
 
     logger.info("Pipeline complete!")
