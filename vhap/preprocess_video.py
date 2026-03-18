@@ -156,6 +156,40 @@ def robust_video_matting(image_dir: Path, N_warmup: Optional[int]=10):
             Path(alpha_path).parent.mkdir(parents=True)
         alpha.save(alpha_path)
 
+def style_matte(
+    image_dir: Path,
+    model_path: str = str(Path(__file__).resolve().parents[1] / "model_zoo" / "matting" / "stylematte_synth.pt"),
+):
+    """Run StyleMatte foreground matting on extracted frames.
+
+    Saves alpha maps as grayscale JPEGs in a sibling ``alpha_maps/`` folder,
+    mirroring the naming convention of :func:`robust_video_matting`.
+    """
+    from vhap.external.human_matting import StyleMatteEngine
+
+    print(f"Running StyleMatte matting on images in {image_dir}")
+    engine = StyleMatteEngine(device="cuda", human_matting_path=model_path)
+
+    dataset = ImageFolderDataset(image_folder=image_dir)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
+
+    for item in tqdm(dataloader):
+        rgb = item["rgb"]  # (1, H, W, 3) uint8
+        rgb = rgb[0].permute(2, 0, 1).float().cuda() / 255  # (3, H, W) [0,1]
+
+        with torch.no_grad():
+            alpha = engine(rgb, return_type="alpha")  # (H, W) [0,1]
+
+        alpha_np = (alpha.cpu().numpy() * 255).astype("uint8")
+        alpha_img = Image.fromarray(alpha_np)
+
+        alpha_path = item["image_path"][0].replace("images", "alpha_maps")
+        Path(alpha_path).parent.mkdir(parents=True, exist_ok=True)
+        alpha_img.save(alpha_path)
+
+    torch.cuda.empty_cache()
+
+
 def downsample_frames(image_dir: Path, n_downsample: int):
     print(f'Downsample frames in {image_dir} by {n_downsample}')
     assert n_downsample in [2, 4, 8]

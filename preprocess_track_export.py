@@ -65,6 +65,7 @@ from vhap.export_flame_params import FLAMEParamDatasetWriter
 from vhap.model.tracker import GlobalTracker, detect_landmarks
 from vhap.preprocess_video import (
     robust_video_matting,
+    style_matte,
     video2frames,
 )
 
@@ -211,8 +212,8 @@ def main(
     # --- Preprocess ---
     target_fps: int = 30,
     matting_method: Optional[
-        Literal["robust_video_matting", "background_matting_v2"]
-    ] = "robust_video_matting",
+        Literal["robust_video_matting", "style_matte", "background_matting_v2"]
+    ] = "style_matte",
     # --- Track ---
     device: Literal["cuda", "cpu"] = "cuda",
     batch_size: int = 64,
@@ -267,13 +268,14 @@ def main(
 
     if matting_method == "robust_video_matting":
         robust_video_matting(image_dir)
+    if matting_method == "style_matte":
+        style_matte(image_dir)
     if matting_method == "background_matting_v2":
         raise NotImplementedError(
             "BackgroundMattingV2 integration is not implemented yet."
         )
 
     detect_landmarks(cfg)
-
 
     # ------------------------------------------------------------------
     # Step 2: Track — FLAME optimisation
