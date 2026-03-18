@@ -1334,90 +1334,85 @@ class GlobalTracker(FlameTracker):
         return optim
 
     def optimize(self):
-        """
-        Optimizes flame parameters on all frames of the dataset with random rampling
-        :return:
-        """
+        """Optimizes flame parameters: sequential per-frame tracking then global optimization."""
         self.global_step = 0
-        
-        # sequential optimization of timesteps
+        self._run_sequential_tracking()
+
+        if self.cfg.log.visualization_local_tracking:
+            self.evaluate(
+                make_visualization=self.cfg.log.visualization_local_tracking,
+                epoch=0,
+            )
+
+        self._run_global_tracking()
+        self.logger.info("All done.")
+
+    def _run_sequential_tracking(self):
+        """Sequential per-frame optimization over all timesteps."""
         self.logger.info(f"Start sequential tracking FLAME in {self.n_timesteps} frames")
         dataloader = DataLoader(
             self.dataset,
             batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
             shuffle=False,
-            num_workers=0
+            num_workers=0,
         )
+        tracking_stage = 'rgb_sequential_tracking' if self.cfg.exp.photometric else 'lmk_sequential_tracking'
         for sample in dataloader:
             if sample["timestep_index"][0].item() == 0:
-                self.optimize_stage('lmk_init_rigid', sample)
-                self.optimize_stage('lmk_init_all', sample)
-                if self.cfg.exp.photometric:
-                    self.optimize_stage('rgb_init_texture', sample)
-                    self.optimize_stage('rgb_init_all', sample)
-                    if self.cfg.model.use_static_offset:
-                        self.optimize_stage('rgb_init_offset', sample)
+                self._run_init_stages(sample)
 
-            if self.cfg.exp.photometric:
-                self.optimize_stage('rgb_sequential_tracking', sample)
-            else:
-                self.optimize_stage('lmk_sequential_tracking', sample)
-            # self.initialize_next_timtestep(sample["timestep_index"])
+            self._optimize_on_sample(tracking_stage, sample)
             self.initialize_next_timestep(sample["timestep_index"])
 
-        if self.cfg.log.visualization_local_tracking: 
-            self.evaluate(
-                make_visualization=self.cfg.log.visualization_local_tracking, 
-                epoch=0,
-            )
+    def _run_init_stages(self, sample):
+        """Run initialization stages on the first timestep."""
+        self._optimize_on_sample('lmk_init_rigid', sample)
+        self._optimize_on_sample('lmk_init_all', sample)
+        if self.cfg.exp.photometric:
+            self._optimize_on_sample('rgb_init_texture', sample)
+            self._optimize_on_sample('rgb_init_all', sample)
+            if self.cfg.model.use_static_offset:
+                self._optimize_on_sample('rgb_init_offset', sample)
 
-        self.logger.info(f"Start global optimization of all frames")
-        # global optimization with random sampling
+    def _run_global_tracking(self):
+        """Global optimization with random sampling over all frames."""
+        self.logger.info("Start global optimization of all frames")
         dataloader = DataLoader(
             self.dataset,
             batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
             shuffle=True,
-            num_workers=0
+            num_workers=0,
         )
-        if self.cfg.exp.photometric:
-            global_stage = 'rgb_global_tracking'
-        else:
-            global_stage = 'lmk_global_tracking'
-        self.optimize_stage(stage=global_stage, dataloader=dataloader, lr_scale=0.1)
+        stage = 'rgb_global_tracking' if self.cfg.exp.photometric else 'lmk_global_tracking'
+        self._optimize_on_dataloader(stage, dataloader, lr_scale=0.1)
+        self.save_result(epoch=self.cfg.pipeline[stage].num_epochs)
 
-        self.save_result(epoch=self.cfg.pipeline[global_stage].num_epochs)
-        self.logger.info("All done.")
-    
-    def optimize_stage(
-            self, 
-            stage: Literal['lmk_init_rigid', 'lmk_init_all', 'rgb_init_texture', 'rgb_init_all', 'rgb_init_offset', 'rgb_sequential_tracking', 'rgb_global_tracking'],
-            sample = None,
-            dataloader = None,
-            lr_scale = 1.0,
-        ):
+    def _optimize_on_sample(self, stage, sample, lr_scale=1.0):
+        """Optimize for a fixed number of steps on a single sample."""
         params = self.get_train_parameters(stage)
         optimizer = self.configure_optimizer(params, lr_scale=lr_scale)
+        num_steps = self.cfg.pipeline[stage].num_steps
+        for step_i in range(num_steps):
+            self.optimize_iter(sample, optimizer, stage, stage_step=step_i)
 
-        if sample is not None:
-            num_steps = self.cfg.pipeline[stage].num_steps
-            for step_i in range(num_steps):
-                self.optimize_iter(sample, optimizer, stage, stage_step=step_i)
-        else:
-            assert dataloader is not None
-            num_epochs = self.cfg.pipeline[stage].num_epochs
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-            for epoch_i in range(num_epochs):
-                self.logger.info(f"EPOCH {epoch_i+1} / {num_epochs}")
-                for step_i, sample in enumerate(dataloader):
-                    self.optimize_iter(sample, optimizer, stage)
-                scheduler.step()
+    def _optimize_on_dataloader(self, stage, dataloader, lr_scale=1.0):
+        """Optimize over multiple epochs on a dataloader with LR scheduling."""
+        params = self.get_train_parameters(stage)
+        optimizer = self.configure_optimizer(params, lr_scale=lr_scale)
+        num_epochs = self.cfg.pipeline[stage].num_epochs
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+        for epoch_i in range(num_epochs):
+            self.logger.info(f"EPOCH {epoch_i+1} / {num_epochs}")
+            for step_i, sample in enumerate(dataloader):
+                self.optimize_iter(sample, optimizer, stage)
+            scheduler.step()
 
-                if self.cfg.log.visualization_interval > 0 \
-                    and(epoch_i + 1) % self.cfg.log.visualization_interval == 0:
-                    self.evaluate(
-                        make_visualization=self.cfg.log.visualization_global_tracking, 
-                        epoch=epoch_i+1,
-                    )
+            if self.cfg.log.visualization_interval > 0 \
+                and (epoch_i + 1) % self.cfg.log.visualization_interval == 0:
+                self.evaluate(
+                    make_visualization=self.cfg.log.visualization_global_tracking,
+                    epoch=epoch_i+1,
+                )
     
     def optimize_iter(self, sample, optimizer, stage, stage_step=None):
         # compute loss and update parameters
