@@ -1032,8 +1032,8 @@ class FlameTracker:
         
     @torch.no_grad()
     def evaluate(self, make_visualization=True, epoch=0):
-        # always save parameters before evaluation
-        self.save_result(epoch=epoch)
+        if self.cfg.log.save_results:
+            self.save_result(epoch=epoch)
 
         self.logger.info("Started Evaluation")
         # vid_frames = []
@@ -1362,10 +1362,14 @@ class GlobalTracker(FlameTracker):
                 self.optimize_stage('rgb_sequential_tracking', sample)
             else:
                 self.optimize_stage('lmk_sequential_tracking', sample)
-            self.initialize_next_timtestep(sample["timestep_index"])
-            # self.initialize_next_timestep(sample["timestep_index"])
-        
-        self.evaluate(make_visualization=True, epoch=0)
+            # self.initialize_next_timtestep(sample["timestep_index"])
+            self.initialize_next_timestep(sample["timestep_index"])
+
+        if self.cfg.log.visualization_local_tracking: 
+            self.evaluate(
+                make_visualization=self.cfg.log.visualization_local_tracking, 
+                epoch=0,
+            )
 
         self.logger.info(f"Start global optimization of all frames")
         # global optimization with random sampling
@@ -1376,10 +1380,12 @@ class GlobalTracker(FlameTracker):
             num_workers=0
         )
         if self.cfg.exp.photometric:
-            self.optimize_stage(stage='rgb_global_tracking', dataloader=dataloader, lr_scale=0.1)
+            global_stage = 'rgb_global_tracking'
         else:
-            self.optimize_stage(stage='lmk_global_tracking', dataloader=dataloader, lr_scale=0.1)
+            global_stage = 'lmk_global_tracking'
+        self.optimize_stage(stage=global_stage, dataloader=dataloader, lr_scale=0.1)
 
+        self.save_result(epoch=self.cfg.pipeline[global_stage].num_epochs)
         self.logger.info("All done.")
     
     def optimize_stage(
@@ -1406,8 +1412,12 @@ class GlobalTracker(FlameTracker):
                     self.optimize_iter(sample, optimizer, stage)
                 scheduler.step()
 
-                if (epoch_i + 1) % 10 == 0:
-                    self.evaluate(make_visualization=True, epoch=epoch_i+1)
+                if self.cfg.log.visualization_interval > 0 \
+                    and(epoch_i + 1) % self.cfg.log.visualization_interval == 0:
+                    self.evaluate(
+                        make_visualization=self.cfg.log.visualization_global_tracking, 
+                        epoch=epoch_i+1,
+                    )
     
     def optimize_iter(self, sample, optimizer, stage, stage_step=None):
         # compute loss and update parameters
@@ -1422,8 +1432,7 @@ class GlobalTracker(FlameTracker):
             lmks,
             albedos,
             output_dict,
-        ) = self.compute_energy(sample, stage=stage,
-        )
+        ) = self.compute_energy(sample, stage=stage)
         optimizer.zero_grad()
         E_total.backward()
         optimizer.step()

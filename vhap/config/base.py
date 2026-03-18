@@ -209,6 +209,13 @@ class LogConfig(Config):
     max_num_views: int = 3
     """The maximum number of views for log"""
     stack_views_in_rows: bool = True
+    """Whether to visualize the logging results"""
+    visualization_local_tracking: bool = False
+    visualization_global_tracking: bool = False
+    """The epoch interval for visualization during global tracking"""
+    visualization_interval: int = -1
+    """save results when evaluation"""
+    save_results: bool = False
 
 
 @dataclass()
