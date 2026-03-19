@@ -161,7 +161,7 @@ def test_track(work_dir):
 
 
 @pytest.mark.order(4)
-def test_export(work_dir):
+def test_export(work_dir, avatar_dir_state_file):
     """Export FLAME parameters from tracking output."""
     from vhap.export_as_nerf_dataset import load_config
     from vhap.export_flame_params import FLAMEParamDatasetWriter
@@ -197,3 +197,14 @@ def test_export(work_dir):
     # Verify foreground image
     fg_image = _st.export_folder / "foreground_image.png"
     assert fg_image.exists(), "foreground_image.png not created"
+
+    # Communicate export folder to downstream vgen tests
+    with open(avatar_dir_state_file, "w") as f:
+        json.dump({"avatar_dir": str(_st.export_folder)}, f)
+
+    # Clean up intermediate data (mirrors production pipeline cleanup)
+    seq_dir = _st.root_folder / _st.sequence
+    if seq_dir.exists():
+        shutil.rmtree(seq_dir)
+    if _st.output_folder.exists():
+        shutil.rmtree(_st.output_folder)

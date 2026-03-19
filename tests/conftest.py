@@ -30,3 +30,12 @@ def work_dir(tmp_path_factory):
         └── export_output/        # exported flame params
     """
     return tmp_path_factory.mktemp("smoke")
+
+
+@pytest.fixture(scope="session")
+def avatar_dir_state_file(tmp_path_factory):
+    """Path to a JSON file for passing the avatar directory between test modules.
+
+    Written by test_smoke.py::test_export, read by test_smoke_vgen.py.
+    """
+    return tmp_path_factory.getbasetemp() / "avatar_dir.json"
