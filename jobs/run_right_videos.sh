@@ -1,6 +1,15 @@
 #!/bin/bash
 
-DATA_FOLDER="data"
+DATA_FOLDER="data/video_pairs"
+START_TIME=$(date +%s)
+
+format_duration() {
+    local total_seconds=$1
+    local hours=$((total_seconds / 3600))
+    local minutes=$(((total_seconds % 3600) / 60))
+    local seconds=$((total_seconds % 60))
+    printf "%02d:%02d:%02d" "$hours" "$minutes" "$seconds"
+}
 
 # Find all .mp4 videos with "right" in the name
 SEQUENCES=()
@@ -18,36 +27,14 @@ for SEQUENCE in "${SEQUENCES[@]}"; do
     echo "========================================="
     echo "Processing: ${SEQUENCE}"
     echo "========================================="
-
-    #======= Preprocess =======#
-    RAW_VIDEO_PATH="${DATA_FOLDER}/${SEQUENCE}.mp4"
-    PREPROCESSED_DIR="${DATA_FOLDER}/${SEQUENCE}"
-
-    if [ ! -d "${PREPROCESSED_DIR}/images" ]; then
-        echo "[Preprocess] ${SEQUENCE}"
-        python vhap/preprocess_video.py \
-            --input "${RAW_VIDEO_PATH}" \
-            --matting_method robust_video_matting
-    else
-        echo "[Preprocess] Skipping ${SEQUENCE} (already preprocessed)"
-    fi
-
-    #======= Track (landmark-only, no photometric) =======#
-    TRACK_OUTPUT_FOLDER="output/monocular/${SEQUENCE}_lmkOnly"
-
-    # Check if tracking already completed (last epoch npz exists)
-    last_folder=$(find "$TRACK_OUTPUT_FOLDER" -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)
-    if [ -n "$last_folder" ] && [ -e "$last_folder/tracked_flame_params_30.npz" ]; then
-        echo "[Track] Skipping ${SEQUENCE} (already tracked)"
-    else
-        echo "[Track] ${SEQUENCE}"
-        python vhap/track.py \
-            --data.root_folder "${DATA_FOLDER}" \
-            --data.sequence "${SEQUENCE}" \
-            --exp.output_folder "${TRACK_OUTPUT_FOLDER}" \
-            --exp.no_photometric
-    fi
+    # Run the Python script for each sequence
+    python preprocess_track_export.py -i "${DATA_FOLDER}/${SEQUENCE}.mp4"
 done
 
 echo ""
 echo "All done."
+
+END_TIME=$(date +%s)
+ELAPSED_TIME=$((END_TIME - START_TIME))
+
+echo "Total time consumed: $(format_duration "$ELAPSED_TIME") (${ELAPSED_TIME}s)"
