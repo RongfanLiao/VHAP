@@ -163,3 +163,4 @@ export/
 *.zip
 *.gif
 *.pt
+/model_zoo/
