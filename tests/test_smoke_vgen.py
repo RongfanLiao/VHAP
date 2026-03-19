@@ -1,4 +1,4 @@
-"""Smoke test for the vgen (tools/video_gen.py) inference pipeline.
+"""Smoke test for the vgen (toos/flame_param_to_video.py) inference pipeline.
 
 Runs preprocess_image -> VhapMotionLoader -> LAM inference on the
 avatar directory produced by the video_to_flame_param smoke test.
@@ -152,7 +152,7 @@ def test_lam_inference(tmp_path):
     assert _st.avatar_dir is not None, "test_preprocess_image must run first"
     assert _st.motion_seq is not None, "test_motion_loader must run first"
 
-    from tools.video_gen import run_inference
+    from toos.flame_param_to_video import run_inference
     from vgen.inference import build_model, parse_configs
 
     # Save global state to restore later

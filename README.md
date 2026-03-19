@@ -12,7 +12,7 @@ The result is a single repo that covers preprocessing, foreground matting, landm
 
 - Tracks a head sequence from monocular video using FLAME and photometric optimization.
 - Exports compact avatar-facing / NeRF-style assets such as `transforms.json`, `flame_param.npz`, masks, and a foreground reference image.
-- Integrates a `vgen/` inference stack so exported VHAP assets can be rendered into a final video with `tools/video_gen.py`.
+- Integrates a `vgen/` inference stack so exported VHAP assets can be rendered into a final video with `toos/flame_param_to_video.py`.
 - Provides lower-level tracking utilities, NeRSemble entrypoints, and interactive FLAME viewers.
 
 ## Main Entry Points
@@ -20,7 +20,7 @@ The result is a single repo that covers preprocessing, foreground matting, landm
 | Path | Purpose |
 | --- | --- |
 | `tools/video_to_flame_param.py` | End-to-end monocular pipeline: extract frames, matte foreground, track FLAME, export lightweight assets. |
-| `tools/video_gen.py` | Run the integrated LAM inference path on an exported avatar directory and write an output video. |
+| `toos/flame_param_to_video.py` | Run the integrated LAM inference path on an exported avatar directory and write an output video. |
 | `vhap/flame_editor.py` | Inspect FLAME masks and regions. |
 | `vhap/flame_viewer.py` | Visualize tracked FLAME sequences. |
 
@@ -84,7 +84,7 @@ Notes:
 
 - `nvdiffrast` is built from source on first use. The current renderer bootstrap infers the active env from `sys.executable` and fills `CUDA_HOME`, `CUDACXX`, and related search paths automatically, but the CUDA toolkit still needs to be installed inside the env.
 - The integrated LAM path is version-sensitive. Keep the pinned runtime from `pyproject.toml`, especially `accelerate==1.13.0`, `diffusers==0.32.2`, and `transformers==4.41.2`. Newer versions may run without crashing but still change the rendered video.
-- The same environment has been validated to run both `tools/video_to_flame_param.py` and `tools/video_gen.py`.
+- The same environment has been validated to run both `tools/video_to_flame_param.py` and `toos/flame_param_to_video.py`.
 
 ## Required Assets
 
@@ -154,7 +154,7 @@ Useful options:
 ### 2. Generate a Video from Exported VHAP Assets
 
 ```shell
-python tools/video_gen.py -a export/data/0408_right
+python toos/flame_param_to_video.py -a export/data/0408_right
 ```
 
 By default this writes:
@@ -206,7 +206,7 @@ pip install nvdiffrast@git+https://github.com/ShenhanQian/nvdiffrast@backface-cu
 rm -rf ~/.cache/torch_extensions/*/nvdiffrast*
 ```
 
-### `tools/video_gen.py` runs but the video looks wrong
+### `toos/flame_param_to_video.py` runs but the video looks wrong
 
 This usually means the LAM runtime drifted away from the pinned versions. Re-check the currently pinned dependencies in `pyproject.toml`, especially:
 

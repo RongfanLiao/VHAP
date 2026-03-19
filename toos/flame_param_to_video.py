@@ -1,9 +1,9 @@
-"""CLI video generation script for LAM using the lightweight motion format.
+"""CLI video generation script for FLAME-parameter-driven LAM rendering.
 
 Usage::
 
-    python tools/video_gen.py -a export/data/avatar_dir
-    python tools/video_gen.py -a export/data/avatar_dir --output output/result.mp4
+    python toos/flame_param_to_video.py -a export/data/avatar_dir
+    python toos/flame_param_to_video.py -a export/data/avatar_dir --output output/result.mp4
 """
 
 import argparse

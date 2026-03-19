@@ -1,7 +1,7 @@
 # Smoke Tests
 
 End-to-end smoke tests for both the video_to_flame_param pipeline and the vgen
-(tools/video_gen.py) inference pipeline.
+(toos/flame_param_to_video.py) inference pipeline.
 
 ## Prerequisites
 
