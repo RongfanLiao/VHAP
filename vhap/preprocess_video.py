@@ -171,21 +171,22 @@ def style_matte(
     engine = StyleMatteEngine(device="cuda", human_matting_path=model_path)
 
     dataset = ImageFolderDataset(image_folder=image_dir)
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
+    dataloader = DataLoader(dataset, batch_size=8, shuffle=False, num_workers=4)
 
     for item in tqdm(dataloader):
-        rgb = item["rgb"]  # (1, H, W, 3) uint8
-        rgb = rgb[0].permute(2, 0, 1).float().cuda() / 255  # (3, H, W) [0,1]
+        rgb = item["rgb"]  # (B, H, W, 3) uint8
+        rgb = rgb.permute(0, 3, 1, 2).float().cuda() / 255  # (B, 3, H, W) [0,1]
 
         with torch.no_grad():
-            alpha = engine(rgb, return_type="alpha")  # (H, W) [0,1]
+            alpha_batch = engine(rgb, return_type="alpha")  # (B, H, W) [0,1]
 
-        alpha_np = (alpha.cpu().numpy() * 255).astype("uint8")
-        alpha_img = Image.fromarray(alpha_np)
+        for i in range(alpha_batch.shape[0]):
+            alpha_np = (alpha_batch[i].cpu().numpy() * 255).astype("uint8")
+            alpha_img = Image.fromarray(alpha_np)
 
-        alpha_path = item["image_path"][0].replace("images", "alpha_maps")
-        Path(alpha_path).parent.mkdir(parents=True, exist_ok=True)
-        alpha_img.save(alpha_path)
+            alpha_path = item["image_path"][i].replace("images", "alpha_maps")
+            Path(alpha_path).parent.mkdir(parents=True, exist_ok=True)
+            alpha_img.save(alpha_path)
 
     torch.cuda.empty_cache()
 

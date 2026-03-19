@@ -196,7 +196,7 @@ def main(
     device: Literal["cuda", "cpu"] = "cuda",
     batch_size: int = 64,
     # --- Export ---
-    epoch: int = 30,
+    epoch: int = 20,
     # --- Cleanup ---
     cleanup: bool = True,
     # --- Debug ---

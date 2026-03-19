@@ -1354,7 +1354,9 @@ class GlobalTracker(FlameTracker):
             self.dataset,
             batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
             shuffle=False,
-            num_workers=0,
+            num_workers=4,
+            pin_memory=True,
+            persistent_workers=True,
         )
         tracking_stage = 'rgb_sequential_tracking' if self.cfg.exp.photometric else 'lmk_sequential_tracking'
         for sample in dataloader:
@@ -1381,7 +1383,9 @@ class GlobalTracker(FlameTracker):
             self.dataset,
             batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
             shuffle=True,
-            num_workers=0,
+            num_workers=4,
+            pin_memory=True,
+            persistent_workers=True,
         )
         stage = 'rgb_global_tracking' if self.cfg.exp.photometric else 'lmk_global_tracking'
         self._optimize_on_dataloader(stage, dataloader, lr_scale=0.1)
