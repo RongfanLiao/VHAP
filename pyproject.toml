@@ -53,3 +53,10 @@ authors = [
 
 description = "A complete head tracking pipeline from videos to AvatarFacing datasets."
 readme = "README.md"
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-order"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["smoke: end-to-end smoke test (requires GPU)"]
