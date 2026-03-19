@@ -2,8 +2,8 @@
 
 Usage::
 
-    python toos/flame_param_to_video.py -a export/data/avatar_dir
-    python toos/flame_param_to_video.py -a export/data/avatar_dir --output output/result.mp4
+    python tools/flame_param_to_video.py -a export/data/avatar_dir
+    python tools/flame_param_to_video.py -a export/data/avatar_dir --output output/result.mp4
 """
 
 import argparse
