@@ -1,161 +1,226 @@
-# VHAP: Versatile Head Alignment with Adaptive Appearance Priors
+# VHAP
 
-<div align="center"> 
-  <img src="asset/teaser.gif">
-</div>
 
-## Update
-[2025-07-08] Achieving ~3x acceleration via batchifying frames for monocular videos (`batch_size`=16). Use lower `batch_size` in case of drifting, and set it to 1 for the original behavior.
+VHAP is a head-tracking and avatar-data preparation project built around FLAME, differentiable rasterization, and photometric alignment. In this workspace, the repository supports two practical workflows in the same environment:
 
-## TL;DR
+1. Turn a raw video into tracked FLAME parameters and an exportable lightweight dataset.
+2. Use the exported avatar package to drive the integrated LAM inference stack and generate a video.
 
-- A photometric optimization pipeline based on differentiable mesh rasterization, applied to human head alignment.
-- A perturbation mechanism that implicitly extract and inject regional appearance priors adaptively during rendering, enabling alignment of regions purely based on their appearance consistency, such as the hair, ears, neck, and shoulders, where no pre-defined landmarks are available.
-- The exported tracking results can be directly used to create you own [GaussianAvatars](https://github.com/ShenhanQian/GaussianAvatars).
+The result is a single repo that covers preprocessing, foreground matting, landmark detection, FLAME optimization, dataset export, and downstream talking-head generation.
 
-## License
+## What This Project Does
 
-This work is made available under [CC-BY-NC-SA-4.0](./LICENSE). The repository is derived from the [multi-view head tracker of GaussianAvatars](https://github.com/ShenhanQian/GaussianAvatars/tree/main/reference_tracker), which is subjected to the following statements:
+- Tracks a head sequence from monocular video using FLAME and photometric optimization.
+- Exports compact avatar-facing / NeRF-style assets such as `transforms.json`, `flame_param.npz`, masks, and a foreground reference image.
+- Integrates a `vgen/` inference stack so exported VHAP assets can be rendered into a final video with `infer_vhap.py`.
+- Provides lower-level tracking utilities, NeRSemble entrypoints, and interactive FLAME viewers.
 
-> Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to this software and related documentation. Any commercial use, reproduction, disclosure or distribution of this software and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
+## Main Entry Points
 
-On top of the original repository, we add support to monocular videos and provide a complete set of scripts from video preprocessing to result export for NeRF/3DGS-style applications.
+| Path | Purpose |
+| --- | --- |
+| `preprocess_track_export.py` | End-to-end monocular pipeline: extract frames, matte foreground, track FLAME, export lightweight assets. |
+| `infer_vhap.py` | Run the integrated LAM inference path on an exported avatar directory and write an output video. |
+| `vhap/flame_editor.py` | Inspect FLAME masks and regions. |
+| `vhap/flame_viewer.py` | Visualize tracked FLAME sequences. |
 
-## Setup
+## Repository Layout
+
+- `vhap/`: tracking, rendering, export, FLAME models, viewers, and utilities.
+- `vgen/`: integrated LAM model and inference code.
+- `configs/`: inference and experiment configuration files.
+- `doc/`: workflow-specific notes for monocular and NeRSemble setups.
+- `model_zoo/`: checkpoints and third-party assets expected by the pipeline.
+- `asset/`: FLAME-related assets and media used by the project.
+
+## Supported Workflows
+
+### 1. Monocular Video to Exported Avatar Package
+
+Given a raw video such as `data/0408_right.mp4`, the pipeline can:
+
+1. Extract frames.
+2. Generate foreground mattes.
+3. Detect landmarks.
+4. Optimize FLAME parameters.
+5. Export a compact folder that downstream tools can consume.
+
+### 2. Exported Avatar Package to Generated Video
+
+Given an exported folder such as `export/data/0408_right/`, the LAM integration can:
+
+1. Load the foreground image and motion data.
+2. Build the LAM model from `vgen/`.
+3. Render a video to `output/videos/<avatar>.mp4`.
+
+### 3. Multi-view / NeRSemble Tracking
+
+The repository also keeps the original VHAP tracking stack for NeRSemble and NeRSemble V2. Use the dedicated docs and entrypoints for those datasets.
+
+## Installation
+
+The project is intended for Linux with an NVIDIA GPU. Python 3.10 and CUDA 12.1 are the safest baseline for the current workspace state.
 
 ```shell
 git clone git@github.com:ShenhanQian/VHAP.git
 cd VHAP
 
-conda create --name VHAP -y python=3.10
-conda activate VHAP
+conda create --name vhap -y python=3.10
+conda activate vhap
 
-# Install CUDA and ninja for compilation
-conda install -c "nvidia/label/cuda-12.1.1" cuda-toolkit ninja cmake  # use the right CUDA version
-ln -s "$CONDA_PREFIX/lib" "$CONDA_PREFIX/lib64"  # to avoid error "/usr/bin/ld: cannot find -lcudart"
-conda env config vars set CUDA_HOME=$CONDA_PREFIX  # for compilation
+# CUDA toolkit and native build tools used by nvdiffrast / PyTorch extensions.
+conda install -c "nvidia/label/cuda-12.1.1" cuda-toolkit ninja cmake
+ln -s "$CONDA_PREFIX/lib" "$CONDA_PREFIX/lib64" 2>/dev/null || true
+conda env config vars set CUDA_HOME=$CONDA_PREFIX
 
-# Install PyTorch (make sure that the CUDA version matches with "Step 1")
+# Install a CUDA-matching PyTorch build.
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-# or
-conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
-# make sure torch.cuda.is_available() returns True
 
+# Install the project and its pinned Python dependencies.
 pip install -e .
 ```
 
-For the integrated LAM inference path used by `infer_vhap.py`, keep the runtime pinned to the versions above, especially `diffusers==0.32.2` and `transformers==4.41.2`. Newer releases can load successfully but still change the rendered video.
+Notes:
 
-> [!NOTE]
-> - We use an adjusted version of [nvdiffrast](https://github.com/ShenhanQian/nvdiffrast/tree/backface-culling) for backface-culling. If you have other versions installed before, you can reinstall as follows:
->    ```shell
->    pip install nvdiffrast@git+https://github.com/ShenhanQian/nvdiffrast@backface-culling --force-reinstall
->    rm -r ~/.cache/torch_extensions/*/nvdiffrast*
->    ```
-> - We use [STAR](https://github.com/ShenhanQian/STAR/) for landmark detection by default. Alterntively, [face-alignment](https://github.com/1adrianb/face-alignment) is faster but less accurate.
+- `nvdiffrast` is built from source on first use. The current renderer bootstrap infers the active env from `sys.executable` and fills `CUDA_HOME`, `CUDACXX`, and related search paths automatically, but the CUDA toolkit still needs to be installed inside the env.
+- The integrated LAM path is version-sensitive. Keep the pinned runtime from `pyproject.toml`, especially `accelerate==1.13.0`, `diffusers==0.32.2`, and `transformers==4.41.2`. Newer versions may run without crashing but still change the rendered video.
+- The same environment has been validated to run both `preprocess_track_export.py` and `infer_vhap.py`.
 
-## Download
+## Required Assets
 
 ### FLAME
 
-Our code relies on FLAME. Please download assets from the [official website](https://flame.is.tue.mpg.de/download.php) and store them in the paths below:
+Download FLAME assets from the [official FLAME website](https://flame.is.tue.mpg.de/download.php) and place them here:
 
-- FLAME 2023 (versions w/ jaw rotation) -> `asset/flame/flame2023.pkl`
-- FLAME Vertex Masks -> `asset/flame/FLAME_masks.pkl`
+- `asset/flame/flame2023.pkl`
+- `asset/flame/FLAME_masks.pkl`
 
-> [!NOTE]
-> It is possible to use FLAME 2020 by download to `asset/flame/generic_model.pkl`. The `FLAME_MODEL_PATH` in `flame.py` needs to be updated accordingly.
+Optional:
 
-### Video Data
+- FLAME 2020 can be used via `asset/flame/generic_model.pkl`, but you will need to update the FLAME model path in the code accordingly.
 
-#### Multiview
+### Model Weights
 
-To get access to [NeRSemble](https://tobias-kirschstein.github.io/nersemble/) dataset, please request via the [Google Form](https://forms.gle/rYRoGNh2ed51TDWX9). The directory structure is expected to be like [this](https://github.com/ShenhanQian/VHAP/blob/c9ea660c6c6719110eca5ffdaf9029a2596cc5ca/vhap/data/nersemble_dataset.py#L32-L54).
+If you use the default commands and paths in this repo, keep these assets available:
 
-> [!NOTE]
-> The NeRSemble dataset has been updated to Version 2. Its folder structure and color correction algorithm differ from those in Version 1, so please be careful not to confuse the two.
+- StyleMatte checkpoint under `model_zoo/matting/stylematte_synth.pt`
+- LAM weights under `model_zoo/lam_models/releases/lam/lam-20k/step_045500/`
 
-#### Monocular
+## Quick Start
 
-We use monocular video sequences following [INSTA](https://zielon.github.io/insta/). You can download raw videos from [LRZ](https://syncandshare.lrz.de/getlink/fiJE46wKrG6oTVZ16CUmMr/VHAP).
+### 1. Preprocess, Track, and Export a Monocular Video
 
-## Usage
+For a real run, disable debug mode so the tracker uses the full optimization schedule:
 
-### Monocular
-[For Monocular Videos](doc/monocular.md)
+```shell
+python preprocess_track_export.py \
+  --input data/0408_right.mp4 \
+  --no-debug \
+  --epoch 30
+```
 
-<div align="center"> 
-  <img src="asset/monocular_person_0004.gif" width=100%>
-</div>
+By default this writes:
 
-### Multiview
-[For NeRSemble Dataset](doc/nersemble.md)
+- Tracking outputs to `output/data/0408_right/<timestamp>/`
+- Exported lightweight assets to `export/data/0408_right/`
 
-[For NeRSemble Dataset V2](doc/nersemble_v2.md)
+Typical exported files include:
 
-<div align="center"> 
-  <img src="asset/nersemble_038_EMO-1.gif" width=100%>
-</div>
+```text
+export/data/0408_right/
+  flame_param.npz
+  foreground_image.png
+  transforms.json
+```
 
-## Discussions
+Typical tracking outputs include:
 
-Photometric alignment is versatile but sometimes sensitive.
+```text
+output/data/0408_right/<timestamp>/
+  config.yml
+  tracked_flame_params_*.npz
+  *.log
+```
 
-**Texture map regularization**: Our method relies on a total-variation regularization on the texture map. Its loss weight is by default `1e4` for a monocualr video and `1e5` for the NeRSemble dataset (16 views). For you own multi-view dataset with fewer views, you should lower the regularization by passing `--w.reg_tex_tv 1e4` or 3e4. Otherwise, you may encounter corrupted shapes and blurry textures similar to https://github.com/ShenhanQian/VHAP/issues/10#issue-2558743737 and https://github.com/ShenhanQian/VHAP/issues/6#issue-2524833245.
+For a fast smoke test, omit `--no-debug`. The current CLI defaults to a short debug profile intended for validation rather than final quality.
 
-**Color affinity:** If the color of a point on the foreground contour is too close to the background, the [`static_offset`](https://github.com/ShenhanQian/VHAP/blob/64c18060e7aad104bf05a2c06aab7818f54af6bd/vhap/model/flame.py#L583) can go wild. You may try a different background color by `--data.background_color white` or `--data.background_color black`. You can also disable `static_offset` by `--model.no_use_static_offset`.
+Useful options:
 
-**Occlussion:** When the neck is occluded by collars, the photometric gradients may squeeze and stretch the neck into unnatural shapes. Usually, this problem can be relieved by disabling photometric alignment in certain regions. We hard-coded the occlusion status for some subjects in the NeRSemble dataset with the [`occluded_table`](https://github.com/ShenhanQian/VHAP/blob/51a2792bd3ad3f920d9cd8f1b107a56b92349520/vhap/config/nersemble.py#L71). You can extend the table or temporally change it by, e.g., `--model.occluded neck_lower boundary`.
+- `--output-folder`: override where tracking outputs are written.
+- `--export-output-folder`: override where exported assets are written.
+- `--matting-method`: choose `style_matte` or `robust_video_matting`.
+- `--batch-size`: control tracking batch size.
 
-**Limited degree of freedom:** Another limitation comes from the FLAME model. FLAME is great since it covers the whole head and neck. However, there is only one joint for the neck, between the neck and the head. This means the lower part of the neck cannot move relative to the torse. This limits the model's ability to capture large movement of the head. For example, it's very hard to achieve good alignment of the lower neck and the head at the same time for the *EXP-1-head* sequence in NeRSemble dataset because of the aforementioned lack of degree of freedom.
+### 2. Generate a Video from Exported VHAP Assets
 
-**You are welcomed to report more failure cases and help us improve the tracker.**
+```shell
+python infer_vhap.py -a export/data/0408_right
+```
 
-## Interactive Viewers
+By default this writes:
 
-Our method relies on vertex masks defined on FLAME. We add custom masks to enrich the original ones. You can play with `regions` in our FLAME Editor to see how each mask look like .
+```text
+output/videos/0408_right.mp4
+```
+
+The avatar directory is expected to contain the exported VHAP assets, including:
+
+- `foreground_image.png`
+- `flame_param.npz`
+- `transforms.json`
+- optionally `0408_right.wav` or another `<avatar_name>.wav` file for audio muxing
+
+Useful options:
+
+- `--output`: custom output video path.
+- `--model_name`: custom LAM checkpoint directory.
+- `--infer_config`: custom inference config YAML.
+
+## Utilities
+
+Inspect FLAME masks and custom regions:
 
 ```shell
 python vhap/flame_editor.py
 ```
 
-We also provide a FLAME viewer for you to interact with a tracked sequence.
+Visualize a tracked sequence:
 
 ```shell
 python vhap/flame_viewer.py \
---param_path output/nersemble/074_EMO-1_v16_DS4_wBg_staticOffset/2024-09-09_15-49-02/tracked_flame_params_30.npz \
+  --param_path output/data/0408_right/<timestamp>/tracked_flame_params_30.npz
 ```
 
-Optional, you can enable colored rendering by specifying a texture image with `--tex_path`.
+Both viewers support flat shading via `--no-shade-smooth`. The viewer can also render with a texture image through `--tex_path`.
 
-For both viewers, you can switch to flat shading with `--no-shade-smooth`.
+## Troubleshooting
 
-<div align="center"> 
-  <img src="asset/flame_editor.png" width=49%>
-  <img src="asset/flame_viewer.png" width=49%>
-</div>
+### `nvdiffrast` or CUDA build errors
 
-## Cite
+- Make sure the active env contains `cuda-toolkit`, `ninja`, and `cmake`.
+- If the linker cannot find `-lcudart`, make sure `lib64` points to the env `lib` directory.
+- If the extension cache is stale, reinstall and clear the torch extension cache:
 
-Please kindly cite our repository and preceding paper if you find our software or algorithm useful for your research.
-
-```bibtex
-@misc{qian2024vhap,
-  title={VHAP: Versatile Head Alignment with Adaptive Appearance Priors},
-  author={Qian, Shenhan},
-  year={2024},
-  month={sep},
-  doi={10.5281/zenodo.14988309}
-  url={https://github.com/ShenhanQian/VHAP}
-}
+```shell
+pip install nvdiffrast@git+https://github.com/ShenhanQian/nvdiffrast@backface-culling --force-reinstall
+rm -rf ~/.cache/torch_extensions/*/nvdiffrast*
 ```
 
-```bibtex
-@inproceedings{qian2024gaussianavatars,
-  title={Gaussianavatars: Photorealistic head avatars with rigged 3d gaussians},
-  author={Qian, Shenhan and Kirschstein, Tobias and Schoneveld, Liam and Davoli, Davide and Giebenhain, Simon and Nie{\ss}ner, Matthias},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  pages={20299--20309},
-  year={2024}
-}
-```
+### `infer_vhap.py` runs but the video looks wrong
+
+This usually means the LAM runtime drifted away from the pinned versions. Re-check the currently pinned dependencies in `pyproject.toml`, especially:
+
+- `accelerate==1.13.0`
+- `diffusers==0.32.2`
+- `transformers==4.41.2`
+
+### Missing FLAME assets
+
+If tracking fails early, verify that the FLAME model and mask files are present under `asset/flame/`.
+
+## License
+
+This project is released under [CC-BY-NC-SA-4.0](LICENSE).
+
+The repository is derived from the multi-view head tracker used in [GaussianAvatars](https://github.com/ShenhanQian/GaussianAvatars/tree/main/reference_tracker), which carries the following restriction:
+

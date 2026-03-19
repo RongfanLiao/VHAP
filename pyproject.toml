@@ -51,5 +51,5 @@ authors = [
   {name = "Shenhan Qian", email = "shenhan.qian@tum.de"},
 ]
 
-description = "A complete head tracking pipeline from videos to NeRF-ready datasets."
+description = "A complete head tracking pipeline from videos to AvatarFacing datasets."
 readme = "README.md"
