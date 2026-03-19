@@ -120,9 +120,9 @@ class Alignment:
             # set environment
             utility.set_environment(self.config)
             self.config.init_instance()
-            if self.config.logger is not None:
-                self.config.logger.info("Loaded configure file %s: %s" % (args.config_name, self.config.id))
-                self.config.logger.info("\n" + "\n".join(["%s: %s" % item for item in self.config.__dict__.items()]))
+            # if self.config.logger is not None:
+            #     self.config.logger.info("Loaded configure file %s: %s" % (args.config_name, self.config.id))
+            #     self.config.logger.info("\n" + "\n".join(["%s: %s" % item for item in self.config.__dict__.items()]))
 
             net = utility.get_net(self.config)
             if device_ids == [-1]:

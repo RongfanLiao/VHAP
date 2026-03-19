@@ -8,6 +8,9 @@ from PIL import Image
 import torch
 from vhap.data.image_folder_dataset import ImageFolderDataset
 from torch.utils.data import DataLoader
+from vhap.util.log import get_logger
+
+logger = get_logger(__name__)
 
 
 def _parse_ffmpeg_ratio(value: str) -> float:
@@ -79,7 +82,7 @@ def video2frames(
     if n_downsample <= 0:
         raise ValueError(f'n_downsample must be positive, got {n_downsample}')
 
-    print(f'Converting video {video_path} to frames with downsample scale {n_downsample}')
+    logger.info(f'Converting video {video_path} to frames with downsample scale {n_downsample}')
     image_dir.mkdir(parents=True, exist_ok=True)
 
     video_stream = _probe_video_stream(video_path)
@@ -97,11 +100,11 @@ def video2frames(
     )
     estimated_output_frames = round(source_num_frames * target_fps / source_fps)
 
-    print(
+    logger.info(
         f'[Video]  FPS: {source_fps} | number of frames: {source_num_frames} '
         f'| resolution: {source_width}x{source_height}'
     )
-    print(
+    logger.info(
         f'[Target] FPS: {target_fps} | number of frames: {estimated_output_frames} '
         f'| resolution: {output_width}x{output_height}'
     )
@@ -123,7 +126,7 @@ def video2frames(
 
 
 def robust_video_matting(image_dir: Path, N_warmup: Optional[int]=10):
-    print(f'Running robust video matting on images in {image_dir}')
+    logger.info(f'Running robust video matting on images in {image_dir}')
     # model = torch.hub.load("PeterL1n/RobustVideoMatting", "mobilenetv3").cuda()
     model = torch.hub.load("PeterL1n/RobustVideoMatting", "resnet50").cuda()
 
@@ -167,7 +170,7 @@ def style_matte(
     """
     from vhap.external.human_matting import StyleMatteEngine
 
-    print(f"Running StyleMatte matting on images in {image_dir}")
+    logger.info(f"Running StyleMatte matting on images in {image_dir}")
     engine = StyleMatteEngine(device="cuda", human_matting_path=model_path)
 
     dataset = ImageFolderDataset(image_folder=image_dir)

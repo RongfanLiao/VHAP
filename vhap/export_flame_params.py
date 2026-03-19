@@ -80,8 +80,8 @@ class FLAMEParamDatasetWriter:
         self.src_folder = src_folder
 
         # --- prepare dataloader for camera params ---
-        print("==== Config: data ====")
-        print(tyro.to_yaml(cfg_data))
+        # print("==== Config: data ====")
+        # print(tyro.to_yaml(cfg_data))
 
         cfg_data.target_extrinsic_type = "c2w"
         cfg_data.background_color = "white"
@@ -96,8 +96,8 @@ class FLAMEParamDatasetWriter:
         )
 
         # --- load tracked FLAME params ---
-        print("---- Config: model ----")
-        print(tyro.to_yaml(cfg_model))
+        # print("---- Config: model ----")
+        # print(tyro.to_yaml(cfg_model))
 
         paths = [Path(p) for p in glob(str(src_folder / "tracked_flame_params*.npz"))]
         epochs = [int(p.stem.split("_")[-1]) for p in paths]
@@ -107,7 +107,7 @@ class FLAMEParamDatasetWriter:
             index = epochs.index(epoch)
         flame_params_path = paths[index]
 
-        print(f"Loading FLAME parameters from: {flame_params_path}")
+        # print(f"Loading FLAME parameters from: {flame_params_path}")
         self.flame_params: Dict[str, np.ndarray] = dict(np.load(flame_params_path))
 
         if "focal_length" in self.flame_params:
