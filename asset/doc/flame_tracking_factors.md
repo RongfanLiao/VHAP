@@ -132,7 +132,7 @@ Tradeoff:
 
 This is the biggest quality lever in your current wrapper.
 
-In [../preprocess_track_export.py](../preprocess_track_export.py), the wrapper uses a debug-level budget:
+In [../video_to_flame_param.py](../video_to_flame_param.py), the wrapper uses a debug-level budget:
 
 - `debug_num_steps = 50`,
 - `lmk_global_tracking.num_epochs = 1`,
@@ -230,7 +230,7 @@ If you downsample too aggressively, you reduce useful facial signal.
 
 ## What matters in your current wrapper specifically
 
-For the current wrapper in [../preprocess_track_export.py](../preprocess_track_export.py):
+For the current wrapper in [../video_to_flame_param.py](../video_to_flame_param.py):
 
 - `data.background_color` is explicitly set to `None`.
 - the render background still defaults to `target`.

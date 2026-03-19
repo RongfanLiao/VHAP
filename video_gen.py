@@ -1,9 +1,9 @@
-"""CLI inference script for LAM using the lightweight motion format.
+"""CLI video generation script for LAM using the lightweight motion format.
 
 Usage::
 
-    python infer_vhap.py -a export/data/avatar_dir
-    python infer_vhap.py -a export/data/avatar_dir --output output/result.mp4
+    python video_gen.py -a export/data/avatar_dir
+    python video_gen.py -a export/data/avatar_dir --output output/result.mp4
 """
 
 import os

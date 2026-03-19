@@ -1,4 +1,4 @@
-"""End-to-end pipeline: preprocess video, track FLAME, and export parameters.
+"""End-to-end pipeline: convert a video into exported FLAME parameters.
 
 Integrates the three data-extraction steps into a single script:
 
@@ -12,18 +12,18 @@ Usage::
     # if not specify export_output_folder, 
     # it will be set to track_output_folder / "exported" by default.
 
-    python vhap/preprocess_track_export.py \\
+    python video_to_flame_param.py \\
         --input data/monocular/obama.mp4 \\
         --output-folder output/monocular/obama \\
     
     # alternatively, you can specify export_output_folder explicitly:
-    python vhap/preprocess_track_export.py \\
+    python video_to_flame_param.py \\
         --input data/monocular/obama.mp4 \\
         --output-folder output/monocular/obama \\
         --export-output-folder export/monocular/obama
 
     # With foreground matting and specific epoch
-    python vhap/preprocess_track_export.py \\
+    python video_to_flame_param.py \\
         --input data/monocular/obama.mp4 \\
         --output-folder output/monocular/obama \\
         --export-output-folder export/monocular/obama \\

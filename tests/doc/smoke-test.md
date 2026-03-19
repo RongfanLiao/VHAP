@@ -1,7 +1,7 @@
 # Smoke Tests
 
-End-to-end smoke tests for both the VHAP tracking pipeline and the vgen
-(infer_vhap) inference pipeline.
+End-to-end smoke tests for both the video_to_flame_param pipeline and the vgen
+(video_gen) inference pipeline.
 
 ## Prerequisites
 
@@ -19,25 +19,25 @@ pip install -e ".[dev]"
 ## Run
 
 ```bash
-# Full suite (tracking + vgen):
+# Full suite (video_to_flame_param + vgen):
 pytest tests/ -v -s
 
-# Tracking pipeline only:
+# video_to_flame_param pipeline only:
 pytest tests/test_smoke.py -v -s
 
-# vgen pipeline only (requires prior tracking run):
+# vgen pipeline only (requires prior video_to_flame_param run):
 pytest tests/test_smoke_vgen.py -v -s
 
 # vgen data-loading tests only (no LAM model needed):
 pytest tests/test_smoke_vgen.py -v -s -k "not lam_inference and not output_video"
 ```
 
-Expected runtime: ~2–5 minutes for tracking (stages 1-4), plus additional
+Expected runtime: ~2–5 minutes for video_to_flame_param (stages 1-4), plus additional
 time for LAM inference (stages 7-8) depending on GPU.
 
 ## Test Flow
 
-### Tracking Pipeline (`test_smoke.py`)
+### video_to_flame_param Pipeline (`test_smoke.py`)
 
 | # | Test | Stage | What it does | Validates |
 |---|------|-------|-------------|-----------|
@@ -84,14 +84,14 @@ All outputs go to a pytest-managed temp directory:
 ## Key Files
 
 - `tests/conftest.py` — shared fixtures (sample video path, temp dirs, cross-module state)
-- `tests/test_smoke.py` — tracking pipeline tests (stages 1-4)
+- `tests/test_smoke.py` — video_to_flame_param pipeline tests (stages 1-4)
 - `tests/test_smoke_vgen.py` — vgen inference tests (stages 5-8)
 - `pyproject.toml` — pytest config under `[tool.pytest.ini_options]`
 
 ## Notes
 
 - Tests are ordered via `pytest-order` since each stage depends on the previous.
-- The vgen tests chain from the tracking test's export output via a session-scoped state file.
+- The vgen tests chain from the video_to_flame_param test's export output via a session-scoped state file.
 - Stages 5-6 (data loading) run on CPU and don't require the LAM checkpoint.
 - Stages 7-8 are automatically skipped if the LAM checkpoint or CUDA is unavailable.
 - Debug config uses minimal optimization steps to keep the test fast while still exercising the full code path.

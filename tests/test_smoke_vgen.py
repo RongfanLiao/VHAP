@@ -1,7 +1,7 @@
-"""Smoke test for the vgen (infer_vhap) inference pipeline.
+"""Smoke test for the vgen (video_gen) inference pipeline.
 
 Runs preprocess_image -> VhapMotionLoader -> LAM inference on the
-avatar directory produced by the VHAP tracking smoke test.
+avatar directory produced by the video_to_flame_param smoke test.
 
 Tier A (stages 5-6): Data loading only, CPU, no heavy model.
 Tier B (stages 7-8): Full LAM inference, requires CUDA + checkpoint.
@@ -58,7 +58,7 @@ def _resolve_avatar_dir(avatar_dir_state_file):
             return avatar_dir
     pytest.skip(
         "Avatar directory not available. "
-        "Run the full tracking smoke test first: pytest tests/ -v -s"
+        "Run the full video_to_flame_param smoke test first: pytest tests/ -v -s"
     )
 
 
@@ -152,7 +152,7 @@ def test_lam_inference(tmp_path):
     assert _st.avatar_dir is not None, "test_preprocess_image must run first"
     assert _st.motion_seq is not None, "test_motion_loader must run first"
 
-    from infer_vhap import run_inference
+    from video_gen import run_inference
     from vgen.inference import build_model, parse_configs
 
     # Save global state to restore later

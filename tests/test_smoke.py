@@ -1,7 +1,8 @@
-"""End-to-end smoke test for the VHAP tracking pipeline.
+"""End-to-end smoke test for the video_to_flame_param pipeline.
 
-Runs the full preprocess -> track -> export pipeline in debug mode
-on a short sample video. Requires a CUDA GPU.
+Runs the same preprocess -> track -> export stages as
+video_to_flame_param.py in debug mode on a short sample video.
+Requires a CUDA GPU.
 
 Usage::
 
