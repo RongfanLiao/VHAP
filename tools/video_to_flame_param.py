@@ -175,7 +175,7 @@ def main(
     output_folder: Annotated[Path, arg(aliases=["-t"])] = None,
     export_output_folder: Annotated[Path, arg(aliases=["-e"])] = None,
     # --- Preprocess ---
-    target_fps: int = 30,
+    target_fps: int = 25,
     matting_method: Optional[
         Literal["robust_video_matting", "style_matte", "background_matting_v2"]
     ] = "style_matte",

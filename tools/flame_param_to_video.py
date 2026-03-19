@@ -81,7 +81,7 @@ def run_inference(avatar_dir, output_path, lam, cfg):
         # save video
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         tmp_video = os.path.join(tmpdir, "output_noaudio.mp4")
-        save_images2video(rgb, tmp_video, fps=30)
+        save_images2video(rgb, tmp_video, fps=25)
 
         # add audio if available
         avatar_basename = os.path.basename(avatar_dir.rstrip('/'))
