@@ -90,6 +90,7 @@ def _build_tracking_config(
     batch_size: int,
     epoch: int = 30,
     debug: bool = False,
+    use_amp: bool = False,
 ) -> BaseTrackingConfig:
     """Construct a :class:`BaseTrackingConfig` with sensible defaults.
 
@@ -100,6 +101,7 @@ def _build_tracking_config(
         device: ``'cuda'`` or ``'cpu'``.
         batch_size: Number of frames per batch.
         debug: If True, use minimal steps/epochs for quick testing.
+        use_amp: If True, enable automatic mixed precision (FP16).
 
     Returns:
         A fully-initialised tracking configuration.
@@ -134,6 +136,7 @@ def _build_tracking_config(
         ),
         device=device,
         batch_size=batch_size,
+        use_amp=use_amp,
     )
 
 
@@ -195,6 +198,7 @@ def main(
     # --- Track ---
     device: Literal["cuda", "cpu"] = "cuda",
     batch_size: int = 64,
+    use_amp: bool = True,
     # --- Export ---
     epoch: int = 20,
     # --- Cleanup ---
@@ -254,6 +258,7 @@ def main(
         batch_size=batch_size,
         epoch=epoch,
         debug=debug,
+        use_amp=use_amp,
     )
 
     video2frames(input, image_dir, target_fps=target_fps)

@@ -334,6 +334,8 @@ class BaseTrackingConfig(Config):
     async_func: bool = True
     """Allow asynchronous function calls for speed up"""
     device: Literal['cuda', 'cpu'] = 'cuda'
+    use_amp: bool = False
+    """Use automatic mixed precision (FP16) for faster tracking"""
 
     def get_occluded(self):
         occluded_table = {

@@ -1194,6 +1194,9 @@ class GlobalTracker(FlameTracker):
     def __init__(self, cfg: BaseTrackingConfig):
         super().__init__(cfg)
 
+        self._use_amp = cfg.use_amp and cfg.device == 'cuda'
+        self._scaler = torch.cuda.amp.GradScaler(enabled=self._use_amp)
+
         self.calibrated = cfg.data.calibrated
         # detect_landmarks(cfg)
         # logging
@@ -1423,18 +1426,20 @@ class GlobalTracker(FlameTracker):
         self.clear_cache()
 
         self.fill_cam_params_into_sample(sample)
-        (
-            E_total,
-            log_dict,
-            verts,
-            faces,
-            lmks,
-            albedos,
-            output_dict,
-        ) = self.compute_energy(sample, stage=stage)
+        with torch.cuda.amp.autocast(enabled=self._use_amp):
+            (
+                E_total,
+                log_dict,
+                verts,
+                faces,
+                lmks,
+                albedos,
+                output_dict,
+            ) = self.compute_energy(sample, stage=stage)
         optimizer.zero_grad()
-        E_total.backward()
-        optimizer.step()
+        self._scaler.scale(E_total).backward()
+        self._scaler.step(optimizer)
+        self._scaler.update()
 
         # log energy terms and visualize
         timestep = sample["timestep_index"][0]

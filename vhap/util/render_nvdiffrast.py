@@ -304,26 +304,30 @@ class NVDiffRenderer(torch.nn.Module):
                  screen_coords: N x H x W x 2  with x, y values following pytorch3ds NDC-coord system convention
                                 top left = +1, +1 ; bottom_right = -1, -1
         """
-        # v_normals = self.compute_v_normals(verts, faces)
-        # vertices and faces
-        verts_camera = self.world_to_camera(verts, RT)
-        verts_clip = self.camera_to_clip(verts_camera, K, image_size)
-        tri = faces.int()
-        rast_out, rast_out_db = self.rasterize_fragments(verts_clip, tri, image_size, use_cache, require_grad)
-        rast_dict = {
-            "rast_out": rast_out,
-            "rast_out_db": rast_out_db,
-            "verts": verts,
-            "verts_camera": verts_camera[..., :3],
-            "verts_clip": verts_clip,
-        }
-        
-        # if not require_grad:
-        #     verts_ndc = verts_clip[:, :, :3] / verts_clip[:, :, 3:]
-        #     screen_coords = self.compute_screen_coords(rast_out, verts_ndc, faces, image_size)
-        #     rast_dict["screen_coords"] = screen_coords
+        with torch.cuda.amp.autocast(enabled=False):
+            verts = verts.float()
+            RT = RT.float()
+            K = K.float()
+            # v_normals = self.compute_v_normals(verts, faces)
+            # vertices and faces
+            verts_camera = self.world_to_camera(verts, RT)
+            verts_clip = self.camera_to_clip(verts_camera, K, image_size)
+            tri = faces.int()
+            rast_out, rast_out_db = self.rasterize_fragments(verts_clip, tri, image_size, use_cache, require_grad)
+            rast_dict = {
+                "rast_out": rast_out,
+                "rast_out_db": rast_out_db,
+                "verts": verts,
+                "verts_camera": verts_camera[..., :3],
+                "verts_clip": verts_clip,
+            }
 
-        return rast_dict
+            # if not require_grad:
+            #     verts_ndc = verts_clip[:, :, :3] / verts_clip[:, :, 3:]
+            #     screen_coords = self.compute_screen_coords(rast_out, verts_ndc, faces, image_size)
+            #     rast_dict["screen_coords"] = screen_coords
+
+            return rast_dict
 
     def rasterize_fragments(self, verts_clip, tri, image_size, use_cache, require_grad=False):
         """
@@ -439,130 +443,135 @@ class NVDiffRenderer(torch.nn.Module):
         """
         Renders flame RGBA images (for photometric optimization)
         """
+        with torch.cuda.amp.autocast(enabled=False):
+            rast_out = rast_dict["rast_out"]
+            rast_out_db = rast_dict["rast_out_db"]
+            verts = rast_dict["verts"]
+            verts_camera = rast_dict["verts_camera"]
+            verts_clip = rast_dict["verts_clip"]
+            faces = faces.int()
+            faces_uv = faces_uv.int()
+            fg_mask = torch.clamp(rast_out[..., -1:], 0, 1).bool()
 
-        rast_out = rast_dict["rast_out"]
-        rast_out_db = rast_dict["rast_out_db"]
-        verts = rast_dict["verts"]
-        verts_camera = rast_dict["verts_camera"]
-        verts_clip = rast_dict["verts_clip"]
-        faces = faces.int()
-        faces_uv = faces_uv.int()
-        fg_mask = torch.clamp(rast_out[..., -1:], 0, 1).bool()
+            # Cast any FP16 inputs to FP32
+            tex = tex.float()
+            verts_uv = verts_uv.float()
+            lights = lights.float() if lights is not None else None
 
-        out_dict = {}
+            out_dict = {}
 
-        # ---- vertex attributes ----
-        if  self.lighting_space == 'world':
-            v_normal = self.compute_v_normals(verts, faces)
-        elif  self.lighting_space == 'camera':
-            v_normal = self.compute_v_normals(verts_camera, faces)
-        else:
-            raise NotImplementedError(f"Unknown lighting space: {self.lighting_space}")
-
-        v_attr = [v_normal]
-     
-        v_attr = torch.cat(v_attr, dim=-1)
-        attr, _ = dr.interpolate(v_attr, rast_out, faces)
-        normal = attr[..., :3]
-        normal = V.safe_normalize(normal)
-
-        # ---- uv-space attributes ----
-        texc, texd = dr.interpolate(verts_uv[None, ...], rast_out, faces_uv, rast_db=rast_out_db, diff_attrs='all')
-        if align_texture_except_fid is not None:  # TODO: rethink when shading with normal
-            fid = rast_out[..., -1:].long()  # the face index is shifted by +1
-            mask = torch.zeros(faces.shape[0]+1, dtype=torch.bool, device=fid.device)
-            mask[align_texture_except_fid + 1] = True
-            b, h, w = rast_out.shape[:3]
-            rast_mask = torch.gather(mask.reshape(1, 1, 1, -1).expand(b, h, w, -1), 3, fid)
-            texc = torch.where(rast_mask, texc.detach(), texc)
-
-        tex = tex.permute(0, 2, 3, 1).contiguous()  # (N, T, T, 4)
-        albedo = dr.texture(tex, texc, texd, filter_mode='linear-mipmap-linear', max_mip_level=None)
-        
-        # ---- shading ----
-        diffuse = self.shade(normal, lights)
-        diffuse_detach_normal = self.shade(normal.detach(), lights)
-
-        rgb = albedo * diffuse
-        alpha = fg_mask.float()
-        rgba = torch.cat([rgb, alpha], dim=-1)
-
-        # ---- background ----
-        if isinstance(background_color, list):
-            """Background as a constant color"""
-            rgba_bg = torch.tensor(background_color + [0]).to(rgba).expand_as(rgba)  # RGBA
-        elif isinstance(background_color, torch.Tensor):
-            """Background as a image"""
-            rgba_bg = background_color
-            rgba_bg = torch.cat([rgba_bg, torch.zeros_like(rgba_bg[..., :1])], dim=-1)  # RGBA
-        else:
-            raise ValueError(f"Unknown background type: {type(background_color)}")
-        rgba_bg = rgba_bg.flip(1)  # opengl camera has y-axis up, needs flipping
-        
-        rgba = torch.where(fg_mask, rgba, rgba_bg)
-        rgba_orig = rgba
-
-        if enable_disturbance:
-            # ---- color disturbance ----
-            B, H, W, _ = rgba.shape
-            # compute random blending weights based on the disturbance rate
-            if self.disturb_rate_fg is not None:
-                w_fg = (torch.rand_like(rgba[..., :1]) < self.disturb_rate_fg).int()
+            # ---- vertex attributes ----
+            if  self.lighting_space == 'world':
+                v_normal = self.compute_v_normals(verts, faces)
+            elif  self.lighting_space == 'camera':
+                v_normal = self.compute_v_normals(verts_camera, faces)
             else:
-                w_fg = torch.zeros_like(rgba[..., :1]).int()
-            if self.disturb_rate_bg is not None:
-                w_bg = (torch.rand_like(rgba[..., :1]) < self.disturb_rate_bg).int()
+                raise NotImplementedError(f"Unknown lighting space: {self.lighting_space}")
+
+            v_attr = [v_normal]
+
+            v_attr = torch.cat(v_attr, dim=-1)
+            attr, _ = dr.interpolate(v_attr, rast_out, faces)
+            normal = attr[..., :3]
+            normal = V.safe_normalize(normal)
+
+            # ---- uv-space attributes ----
+            texc, texd = dr.interpolate(verts_uv[None, ...], rast_out, faces_uv, rast_db=rast_out_db, diff_attrs='all')
+            if align_texture_except_fid is not None:  # TODO: rethink when shading with normal
+                fid = rast_out[..., -1:].long()  # the face index is shifted by +1
+                mask = torch.zeros(faces.shape[0]+1, dtype=torch.bool, device=fid.device)
+                mask[align_texture_except_fid + 1] = True
+                b, h, w = rast_out.shape[:3]
+                rast_mask = torch.gather(mask.reshape(1, 1, 1, -1).expand(b, h, w, -1), 3, fid)
+                texc = torch.where(rast_mask, texc.detach(), texc)
+
+            tex = tex.permute(0, 2, 3, 1).contiguous()  # (N, T, T, 4)
+            albedo = dr.texture(tex, texc, texd, filter_mode='linear-mipmap-linear', max_mip_level=None)
+
+            # ---- shading ----
+            diffuse = self.shade(normal, lights)
+            diffuse_detach_normal = self.shade(normal.detach(), lights)
+
+            rgb = albedo * diffuse
+            alpha = fg_mask.float()
+            rgba = torch.cat([rgb, alpha], dim=-1)
+
+            # ---- background ----
+            if isinstance(background_color, list):
+                """Background as a constant color"""
+                rgba_bg = torch.tensor(background_color + [0]).to(rgba).expand_as(rgba)  # RGBA
+            elif isinstance(background_color, torch.Tensor):
+                """Background as a image"""
+                rgba_bg = background_color
+                rgba_bg = torch.cat([rgba_bg, torch.zeros_like(rgba_bg[..., :1])], dim=-1)  # RGBA
             else:
-                w_bg = torch.zeros_like(rgba[..., :1]).int()
-            
-            # sample pixles from clusters
-            fid = rast_out[..., -1:].long()  # the face index is shifted by +1
-            num_clusters = self.fid2cid.max() + 1
+                raise ValueError(f"Unknown background type: {type(background_color)}")
+            rgba_bg = rgba_bg.flip(1)  # opengl camera has y-axis up, needs flipping
 
-            fid2cid = self.fid2cid[None, None, None, :].expand(B, H, W, -1)
-            cid = torch.gather(fid2cid, -1, fid)
-            out_dict['cid'] = cid.flip(1)
+            rgba = torch.where(fg_mask, rgba, rgba_bg)
+            rgba_orig = rgba
 
-            rgba_ = torch.zeros_like(rgba)
-            for i in range(num_clusters):
-                c_rgba = rgba_bg if i == 0 else rgba
-                w = w_bg if i == 0 else w_fg
-
-                c_mask = cid == i
-                c_pixels = c_rgba[c_mask.repeat_interleave(4, dim=-1)].reshape(-1, 4).detach()  # NOTE: detach to avoid gradient flow
-
-                if i != 1:  # skip #1 indicate faces that are not in any cluster
-                    if len(c_pixels) > 0:
-                        c_idx = torch.randint(0, len(c_pixels), (B * H * W, ), device=c_pixels.device)
-                        c_sample = c_pixels[c_idx].reshape(B, H, W, 4)
-                        rgba_ += c_mask * (c_sample * w + c_rgba * (1 - w))
+            if enable_disturbance:
+                # ---- color disturbance ----
+                B, H, W, _ = rgba.shape
+                # compute random blending weights based on the disturbance rate
+                if self.disturb_rate_fg is not None:
+                    w_fg = (torch.rand_like(rgba[..., :1]) < self.disturb_rate_fg).int()
                 else:
-                    rgba_ += c_mask * c_rgba
-            rgba = rgba_
+                    w_fg = torch.zeros_like(rgba[..., :1]).int()
+                if self.disturb_rate_bg is not None:
+                    w_bg = (torch.rand_like(rgba[..., :1]) < self.disturb_rate_bg).int()
+                else:
+                    w_bg = torch.zeros_like(rgba[..., :1]).int()
 
-        # ---- AA on both RGB and alpha channels ----
-        if align_boundary_except_vid is not None:
-            verts_clip = self.detach_by_indices(verts_clip, align_boundary_except_vid)
-        rgba_aa = dr.antialias(rgba, rast_out, verts_clip, faces.int())
-        aa = ((rgba - rgba_aa) != 0).any(dim=-1, keepdim=True).repeat_interleave(4, dim=-1)
+                # sample pixles from clusters
+                fid = rast_out[..., -1:].long()  # the face index is shifted by +1
+                num_clusters = self.fid2cid.max() + 1
 
-        # rgba_aa = torch.where(aa, rgba_aa, rgba_orig)  # keep the original color if not antialiased (commented out due to worse tracking performance)
-        
-        # ---- AA only on RGB channels ----
-        # rgb = rgba[..., :3].contiguous()
-        # alpha = rgba[..., 3:]
-        # rgb = dr.antialias(rgb, rast_out, verts_clip, faces.int())
-        # rgba = torch.cat([rgb, alpha], dim=-1)
-        
-        out_dict.update({
-            'albedo': albedo.flip(1),
-            'normal': normal.flip(1),
-            'diffuse': diffuse.flip(1),
-            'diffuse_detach_normal': diffuse_detach_normal.flip(1),
-            'rgba': rgba_aa.flip(1),
-            'aa': aa[..., :3].float().flip(1),
-        })
-        return out_dict
+                fid2cid = self.fid2cid[None, None, None, :].expand(B, H, W, -1)
+                cid = torch.gather(fid2cid, -1, fid)
+                out_dict['cid'] = cid.flip(1)
+
+                rgba_ = torch.zeros_like(rgba)
+                for i in range(num_clusters):
+                    c_rgba = rgba_bg if i == 0 else rgba
+                    w = w_bg if i == 0 else w_fg
+
+                    c_mask = cid == i
+                    c_pixels = c_rgba[c_mask.repeat_interleave(4, dim=-1)].reshape(-1, 4).detach()  # NOTE: detach to avoid gradient flow
+
+                    if i != 1:  # skip #1 indicate faces that are not in any cluster
+                        if len(c_pixels) > 0:
+                            c_idx = torch.randint(0, len(c_pixels), (B * H * W, ), device=c_pixels.device)
+                            c_sample = c_pixels[c_idx].reshape(B, H, W, 4)
+                            rgba_ += c_mask * (c_sample * w + c_rgba * (1 - w))
+                    else:
+                        rgba_ += c_mask * c_rgba
+                rgba = rgba_
+
+            # ---- AA on both RGB and alpha channels ----
+            if align_boundary_except_vid is not None:
+                verts_clip = self.detach_by_indices(verts_clip, align_boundary_except_vid)
+            rgba_aa = dr.antialias(rgba, rast_out, verts_clip, faces.int())
+            aa = ((rgba - rgba_aa) != 0).any(dim=-1, keepdim=True).repeat_interleave(4, dim=-1)
+
+            # rgba_aa = torch.where(aa, rgba_aa, rgba_orig)  # keep the original color if not antialiased (commented out due to worse tracking performance)
+
+            # ---- AA only on RGB channels ----
+            # rgb = rgba[..., :3].contiguous()
+            # alpha = rgba[..., 3:]
+            # rgb = dr.antialias(rgb, rast_out, verts_clip, faces.int())
+            # rgba = torch.cat([rgb, alpha], dim=-1)
+
+            out_dict.update({
+                'albedo': albedo.flip(1),
+                'normal': normal.flip(1),
+                'diffuse': diffuse.flip(1),
+                'diffuse_detach_normal': diffuse_detach_normal.flip(1),
+                'rgba': rgba_aa.flip(1),
+                'aa': aa[..., :3].float().flip(1),
+            })
+            return out_dict
     
     def render_rgba_vis(
         self, verts, faces, RT, K, image_size, background_color=[1., 1., 1.],
