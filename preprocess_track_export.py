@@ -279,6 +279,9 @@ def main(
         if seq_dir.exists():
             shutil.rmtree(seq_dir)
             logger.info(f"Removed intermediate data {seq_dir}")
+        if output_folder.exists():
+            shutil.rmtree(output_folder)
+            logger.info(f"Removed intermediate tracking output {output_folder}")
 
     logger.info("Pipeline complete!")
 
