@@ -5,9 +5,90 @@
 # related documentation without an express license agreement from Toyota Motor Europe NV/SA 
 # is strictly prohibited.
 #
-
-
+import os
+import sys
+from pathlib import Path
 from typing import Tuple, Literal, Optional
+
+
+def _prepend_env_paths(name: str, paths: list[Path]) -> None:
+    entries = [entry for entry in os.environ.get(name, "").split(os.pathsep) if entry]
+    merged = []
+    for path in paths:
+        if not path.is_dir():
+            continue
+        value = str(path)
+        if value not in merged:
+            merged.append(value)
+    for entry in entries:
+        if entry not in merged:
+            merged.append(entry)
+    if merged:
+        os.environ[name] = os.pathsep.join(merged)
+
+
+def _infer_env_prefix() -> Optional[Path]:
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        return Path(conda_prefix)
+
+    python_exe = Path(sys.executable).resolve()
+    if python_exe.parent.name == "bin":
+        return python_exe.parent.parent
+    return None
+
+
+def _configure_nvdiffrast_build_env() -> None:
+    prefix = _infer_env_prefix()
+    if prefix is None:
+        return
+
+    bin_dir = prefix / "bin"
+    include_dirs = []
+    lib_dirs = []
+
+    os.environ.setdefault("CONDA_PREFIX", str(prefix))
+    _prepend_env_paths("PATH", [bin_dir])
+
+    if (bin_dir / "nvcc").is_file():
+        os.environ.setdefault("CUDA_HOME", str(prefix))
+        os.environ.setdefault("CUDACXX", str(bin_dir / "nvcc"))
+
+    for compiler_env, compiler_name in {
+        "CC": "x86_64-conda-linux-gnu-gcc",
+        "CXX": "x86_64-conda-linux-gnu-g++",
+    }.items():
+        compiler_path = bin_dir / compiler_name
+        if compiler_path.is_file():
+            os.environ.setdefault(compiler_env, str(compiler_path))
+
+    prefix_include = prefix / "include"
+    if prefix_include.is_dir():
+        include_dirs.append(prefix_include)
+
+    for lib_dir in (prefix / "lib64", prefix / "lib"):
+        if lib_dir.is_dir():
+            lib_dirs.append(lib_dir)
+
+    nvidia_root = prefix / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/nvidia"
+    if nvidia_root.is_dir():
+        for pkg_dir in sorted(nvidia_root.iterdir()):
+            include_dir = pkg_dir / "include"
+            if include_dir.is_dir():
+                include_dirs.append(include_dir)
+            for lib_dir in (pkg_dir / "lib64", pkg_dir / "lib"):
+                if lib_dir.is_dir():
+                    lib_dirs.append(lib_dir)
+
+    for env_name in ("CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH"):
+        _prepend_env_paths(env_name, include_dirs)
+    for env_name in ("LIBRARY_PATH", "LD_LIBRARY_PATH"):
+        _prepend_env_paths(env_name, lib_dirs)
+
+
+_configure_nvdiffrast_build_env()
+
+
 # from pytorch3d.structures.meshes import Meshes
 import nvdiffrast.torch as dr
 import torch.nn.functional as F

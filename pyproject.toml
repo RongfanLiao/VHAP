@@ -13,7 +13,14 @@ name = "VHAP"
 version = "0.1.0"
 requires-python = ">=3.9"
 dependencies = [
-  "tyro",
+    "accelerate==1.13.0",
+    "tyro",
+    "diffusers==0.32.2",
+    "einops==0.8.2",
+    "huggingface-hub==0.36.2",
+    "moviepy==1.0.3",
+    "omegaconf==2.3.0",
+    "PyMCubes==0.1.6",
     "pyyaml",
     "numpy==1.22.3",
     "matplotlib==3.8.0",
@@ -22,9 +29,11 @@ dependencies = [
     "opencv-python",
     "ffmpeg-python",
     "colour-science",
+    "safetensors==0.7.0",
     "torch",  # manually install to avoid CUDA version mismatch
     "torchvision",  # manually install to avoid CUDA version mismatch
     "tensorboard",
+    "transformers==4.41.2",
     "chumpy",
     "trimesh",
     "nvdiffrast@git+https://github.com/ShenhanQian/nvdiffrast@backface-culling",
