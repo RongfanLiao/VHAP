@@ -32,6 +32,7 @@ Usage::
 """
 
 from pathlib import Path
+from time import perf_counter
 from typing import Annotated, Literal, Optional
 
 import shutil
@@ -163,6 +164,18 @@ def _export(
     writer.write()
 
 
+def _format_elapsed(seconds: float) -> str:
+    """Format elapsed wall-clock time for logging."""
+    minutes, remaining_seconds = divmod(seconds, 60)
+    remaining_seconds = int(remaining_seconds)
+    hours, remaining_minutes = divmod(int(minutes), 60)
+    if hours > 0:
+        return f"{hours:d}h {remaining_minutes:02d}m {remaining_seconds:02d}s"
+    if minutes >= 1:
+        return f"{int(minutes):d}m {remaining_seconds:02d}s"
+    return f"{seconds:.2f}s"
+
+
 # ------------------------------------------------------------------
 # CLI entry point
 # ------------------------------------------------------------------
@@ -202,6 +215,8 @@ def main(
         epoch: Which tracking epoch to export (``-1`` for latest).
         cleanup: Remove intermediate alpha_maps, images, and landmark2d dirs after export.
     """
+    pipeline_start = perf_counter()
+
     # ------------------------------------------------------------------
     # Input validation — fail fast before expensive GPU work
     # ------------------------------------------------------------------
@@ -223,6 +238,7 @@ def main(
     # Step 1: Preprocess — extract frames from video
     # ------------------------------------------------------------------
     logger.info("Step 1/3: Preprocessing video")
+    preprocess_start = perf_counter()
     root_folder, sequence = input.parent, input.stem
     image_dir = root_folder / sequence / "images"
     if output_folder is None:
@@ -252,14 +268,23 @@ def main(
         )
 
     detect_landmarks(cfg)
+    logger.info(
+        "Step 1/3 complete in %s",
+        _format_elapsed(perf_counter() - preprocess_start),
+    )
 
     # ------------------------------------------------------------------
     # Step 2: Track — FLAME optimisation
     # ------------------------------------------------------------------
     logger.info("Step 2/3: FLAME tracking")
+    tracking_start = perf_counter()
       
     tracker = GlobalTracker(cfg)
     tracker.optimize()
+    logger.info(
+        "Step 2/3 complete in %s",
+        _format_elapsed(perf_counter() - tracking_start),
+    )
 
     # The tracker writes outputs into a timestamped subfolder.
     # load_config() resolves the actual subfolder containing config.yml.
@@ -269,16 +294,22 @@ def main(
     # Step 3: Export — lightweight FLAME parameter dataset
     # ------------------------------------------------------------------
     logger.info("Step 3/3: Exporting FLAME parameters")
+    export_start = perf_counter()
     _export(
         cfg=cfg_saved,
         src_folder=src_folder,
         tgt_folder=export_output_folder,
+    )
+    logger.info(
+        "Step 3/3 complete in %s",
+        _format_elapsed(perf_counter() - export_start),
     )
 
     # ------------------------------------------------------------------
     # Optional cleanup — remove intermediate directories
     # ------------------------------------------------------------------
     if cleanup:
+        cleanup_start = perf_counter()
         seq_dir = root_folder / sequence
         if seq_dir.exists():
             shutil.rmtree(seq_dir)
@@ -286,8 +317,15 @@ def main(
         if output_folder.exists():
             shutil.rmtree(output_folder)
             logger.info(f"Removed intermediate tracking output {output_folder}")
+        logger.info(
+            "Cleanup complete in %s",
+            _format_elapsed(perf_counter() - cleanup_start),
+        )
 
-    logger.info("Pipeline complete!")
+    logger.info(
+        "Pipeline complete in %s",
+        _format_elapsed(perf_counter() - pipeline_start),
+    )
 
 
 if __name__ == "__main__":
