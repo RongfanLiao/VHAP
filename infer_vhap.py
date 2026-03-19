@@ -1,17 +1,19 @@
-# Copyright (c) 2024-2025, The Alibaba 3DAIGC Team Authors.
-# CLI inference script for LAM using the lightweight motion format.
-# Usage:
-#   python inference_lightweight.py --image assets/sample_input/messi.png \
-#       --motion /path/to/lightweight_motion_dir --output output/result.mp4
+"""CLI inference script for LAM using the lightweight motion format.
+
+Usage::
+
+    python infer_vhap.py -a export/data/avatar_dir
+    python infer_vhap.py -a export/data/avatar_dir --output output/result.mp4
+"""
 
 import os
+import shutil
 import sys
 import argparse
 import tempfile
 
-import cv2
 import numpy as np
-from PIL import Image
+import cv2
 import torch
 
 from vgen.inference import build_model, parse_configs, save_images2video, add_audio_to_video
@@ -19,36 +21,11 @@ from vgen.runners.infer.head_utils import preprocess_image
 from vgen.runners.infer.vhap_motion import VhapMotionLoader
 
 
-def run_inference(avatar_dir, output_path, flametracking, lam, cfg):
+def run_inference(avatar_dir, output_path, lam, cfg):
     """Run the full inference pipeline using a lightweight motion directory."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        # save raw input
-        # image_raw = os.path.join(tmpdir, "raw.png")
-        # with Image.open(image_path).convert('RGB') as img:
-        #     img.save(image_raw)
-
-        # # flame tracking on input image
-        # print("Running flame tracking...")
-        # return_code = flametracking.preprocess(image_raw)
-        # assert return_code == 0, "flametracking preprocess failed!"
-        # return_code = flametracking.optimize()
-        # assert return_code == 0, "flametracking optimize failed!"
-        # return_code, output_dir = flametracking.export()
-        # assert return_code == 0, "flametracking export failed!"
-
-        # tracked_image_path = os.path.join(output_dir, "images/00000_00.png")
-        # mask_path = os.path.join(output_dir, "fg_masks/00000_00.png")
-        # print(f"Tracked image: {tracked_image_path}")
-        # print(f"Mask: {mask_path}")
-
-        # aspect_standard = 1.0
-        # source_size = cfg.source_size
-        # render_size = cfg.render_size
-        # render_fps = 30
-
         # prepare reference image
         image_path = os.path.join(avatar_dir, "foreground_image.png")
-        # mask_path = os.path.join(avatar_dir, "000000_mask.jpg")
         image, _, _, shape_param = preprocess_image(
             image_path, mask_path=None, intr=None, pad_ratio=0,
             bg_color=1., max_tgt_size=None, aspect_standard=1.0,
@@ -108,7 +85,6 @@ def run_inference(avatar_dir, output_path, flametracking, lam, cfg):
         if os.path.exists(audio_path):
             add_audio_to_video(tmp_video, output_path, audio_path)
         else:
-            import shutil
             shutil.copy2(tmp_video, output_path)
             print(f"No audio found at {audio_path}, saved video without audio.")
 
@@ -117,7 +93,6 @@ def run_inference(avatar_dir, output_path, flametracking, lam, cfg):
 
 def main():
     parser = argparse.ArgumentParser(description="LAM CLI Inference (Lightweight Motion Format)")
-    # parser.add_argument("--image", type=str, required=True, help="Path to input face image")
     parser.add_argument("-a","--avatar", type=str, required=True,
                         help="Path to avatar directory (containing flame_param.npz)")
     parser.add_argument("--output", type=str, default=None,
@@ -130,8 +105,22 @@ def main():
                         help="Inference config yaml")
     args = parser.parse_args()
 
+    # --- input validation ---
     if not os.path.isdir(args.avatar):
         print(f"Error: avatar directory not found: {args.avatar}")
+        sys.exit(1)
+    for required in ("foreground_image.png", "flame_param.npz", "transforms.json"):
+        if not os.path.exists(os.path.join(args.avatar, required)):
+            print(f"Error: {required} not found in {args.avatar}")
+            sys.exit(1)
+    if not os.path.isdir(args.model_name):
+        print(f"Error: model directory not found: {args.model_name}")
+        sys.exit(1)
+    if not os.path.isfile(args.infer_config):
+        print(f"Error: config file not found: {args.infer_config}")
+        sys.exit(1)
+    if not torch.cuda.is_available():
+        print("Error: CUDA is not available (required for LAM inference)")
         sys.exit(1)
 
     # set default output path
@@ -148,29 +137,17 @@ def main():
         'NUMBA_THREADING_LAYER': 'omp',
     })
 
-    # override sys.argv so parse_configs and FlameTrackingSingleImage
-    # don't choke on our CLI args
+    # override sys.argv so parse_configs doesn't choke on our CLI args
     original_argv = sys.argv
     sys.argv = [sys.argv[0], f"model_name={args.model_name}"]
-
     cfg, _ = parse_configs()
-
-    # clear sys.argv to avoid conflicts with FlameTrackingSingleImage._parse_args
     sys.argv = [original_argv[0]]
 
     lam = build_model(cfg)
     lam.to('cuda')
     lam.eval()
 
-    # flametracking = FlameTrackingSingleImage(
-    #     output_dir='output/tracking',
-    #     alignment_model_path='./model_zoo/flame_tracking_models/68_keypoints_model.pkl',
-    #     vgghead_model_path='./model_zoo/flame_tracking_models/vgghead/vgg_heads_l.trcd',
-    #     human_matting_path='./model_zoo/flame_tracking_models/matting/stylematte_synth.pt',
-    #     facebox_model_path='./model_zoo/flame_tracking_models/FaceBoxesV2.pth',
-    #     detect_iris_landmarks=False,
-    # )
-    run_inference(args.avatar, args.output, None, lam, cfg)
+    run_inference(args.avatar, args.output, lam, cfg)
 
 
 if __name__ == '__main__':

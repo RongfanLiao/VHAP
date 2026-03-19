@@ -13,42 +13,50 @@ name = "VHAP"
 version = "0.1.0"
 requires-python = ">=3.9"
 dependencies = [
-    "accelerate==1.13.0",
     "tyro",
-    "diffusers==0.32.2",
-    "einops==0.8.2",
-    "huggingface-hub==0.36.2",
-    "moviepy==1.0.3",
-    "omegaconf==2.3.0",
-    "PyMCubes==0.1.6",
     "pyyaml",
-    "numpy==1.22.3",
-    "matplotlib==3.8.0",
+    "numpy>=1.24,<2.0",
     "scipy",
     "pillow",
     "opencv-python",
-    "ffmpeg-python",
-    "colour-science",
-    "safetensors==0.7.0",
-    "torch",  # manually install to avoid CUDA version mismatch
-    "torchvision",  # manually install to avoid CUDA version mismatch
-    "tensorboard",
+    "matplotlib==3.8.0",
+    "tqdm",
+    "torch>=2.1,<2.5",  # manually install to match CUDA version
+    "torchvision",  # manually install to match CUDA version
+    "pytorch3d@git+https://github.com/facebookresearch/pytorch3d.git@b6a77ad7aaf41ed90fca80ce6a2bac3c462a7881",
     "transformers==4.41.2",
-    "chumpy",
     "trimesh",
-    "nvdiffrast@git+https://github.com/ShenhanQian/nvdiffrast@backface-culling",
-    "BackgroundMattingV2@git+https://github.com/ShenhanQian/BackgroundMattingV2",
-    "STAR@git+https://github.com/ShenhanQian/STAR/",
+    "PyMCubes==0.1.6",
+    "tensorboard",
+    "huggingface-hub==0.36.2",
+    "ffmpeg-python",
+    "chumpy",
+    # --- tracking pipeline ---
+    "nvdiffrast@git+https://github.com/ShenhanQian/nvdiffrast@22718580f24a313c429ba2c304794c264351f108",
+    "BackgroundMattingV2@git+https://github.com/ShenhanQian/BackgroundMattingV2@3df1c506a24865c823ba0f072fec0df885faab53",
+    "STAR@git+https://github.com/ShenhanQian/STAR@be3c8605efb03849c23093f12b9bb87908a7a4d6",
     "dlib",  # for STAR
     "pandas",  # for STAR
     "gdown",  # for STAR
     "face-alignment",
-    "pytorch3d@git+https://github.com/facebookresearch/pytorch3d.git",
-    "dearpygui",
-    "joblib"
+    "colour-science",
+    "joblib",
+    # --- inference pipeline ---
+    "accelerate==1.13.0",
+    "diffusers==0.32.2",
+    "einops==0.8.2",
+    "omegaconf==2.3.0",
+    "moviepy==1.0.3",
+    "safetensors==0.7.0",
+    "imageio",
+    "plyfile",
+    "jaxtyping",
+    "typeguard",
+    "megfile",
+    "rembg",
 ]
 authors = [
-  {name = "Shenhan Qian", email = "shenhan.qian@tum.de"},
+  {name = "Rongfan Liao", email = "rongfan.liao@gmail.com"},
 ]
 
 description = "A complete head tracking pipeline from videos to AvatarFacing datasets."

@@ -59,7 +59,7 @@ from vhap.config.base import (
     StageRgbInitTextureConfig,
     StageRgbSequentialTrackingConfig,
 )
-from vhap.export_as_nerf_dataset import check_epoch, load_config
+from vhap.export_as_nerf_dataset import load_config
 from vhap.util.log import get_logger
 
 logger = get_logger(__name__, root=True)
@@ -75,45 +75,6 @@ from vhap.preprocess_video import (
 # ------------------------------------------------------------------
 # Step builders
 # ------------------------------------------------------------------
-
-
-def _preprocess(
-    input_path: Path,
-    target_fps: int,
-    matting_method: Optional[str],
-) -> tuple:
-    """Extract frames from video and optionally run foreground matting.
-
-    Args:
-        input_path: Path to the raw video file.
-        target_fps: Target frame rate for extraction.
-        matting_method: ``'robust_video_matting'``, ``'background_matting_v2'``,
-            or ``None``.
-
-    Returns:
-        A tuple of ``(root_folder, sequence, image_dir)`` derived from the
-        input path.
-    """
-    assert input_path.suffix in (".mov", ".mp4"), (
-        f"Expected a video file (.mov/.mp4), got: {input_path}"
-    )
-    root_folder = input_path.parent
-    sequence = input_path.stem
-    image_dir = root_folder / sequence / "images"
-
-    # Extract frames
-    video2frames(input_path, image_dir, target_fps=target_fps)
-
-    # Foreground matting
-    if matting_method == "robust_video_matting":
-        robust_video_matting(image_dir)
-    elif matting_method == "background_matting_v2":
-        # background_matting_v2(image_dir)
-        raise NotImplementedError(
-            "BackgroundMattingV2 integration is not implemented yet."
-        )
-
-    return root_folder, sequence, image_dir
 
 
 def _build_tracking_config(
@@ -185,8 +146,6 @@ def _export(
         tgt_folder: Target folder for the exported dataset.
         epoch: Which epoch to export (``-1`` for latest).
     """
-    # check_epoch(src_folder, epoch)
-
     if epoch != -1:
         tgt_folder = Path(str(tgt_folder) + f"_epoch{epoch}")
 
@@ -239,6 +198,20 @@ def main(
         epoch: Which tracking epoch to export (``-1`` for latest).
         cleanup: Remove intermediate alpha_maps, images, and landmark2d dirs after export.
     """
+    # ------------------------------------------------------------------
+    # Input validation — fail fast before expensive GPU work
+    # ------------------------------------------------------------------
+    if not input.exists():
+        raise FileNotFoundError(f"Input video not found: {input}")
+    if input.suffix not in (".mov", ".mp4"):
+        raise ValueError(f"Expected a video file (.mov/.mp4), got: {input}")
+    if device == "cuda":
+        import torch
+        if not torch.cuda.is_available():
+            raise RuntimeError("--device cuda requested but CUDA is not available")
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("ffmpeg not found on PATH (required for frame extraction)")
+
     if debug:
         logger.warning(
             "Running in debug mode: using minimal steps/epochs for quick testing.")
@@ -246,10 +219,6 @@ def main(
     # Step 1: Preprocess — extract frames from video
     # ------------------------------------------------------------------
     logger.info("Step 1/3: Preprocessing video")
-
-    assert input.suffix in (".mov", ".mp4"), (
-        f"Expected a video file (.mov/.mp4), got: {input}"
-    )
     root_folder, sequence = input.parent, input.stem
     image_dir = root_folder / sequence / "images"
     if output_folder is None:
