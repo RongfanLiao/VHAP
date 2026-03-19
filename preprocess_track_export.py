@@ -34,6 +34,8 @@ Usage::
 from pathlib import Path
 from typing import Annotated, Literal, Optional
 
+import shutil
+
 import tyro
 from tyro.conf import arg
 
@@ -219,8 +221,10 @@ def main(
     batch_size: int = 64,
     # --- Export ---
     epoch: int = 30,
+    # --- Cleanup ---
+    cleanup: bool = True,
     # --- Debug ---
-    debug: bool = True,
+    debug: bool = False,
 ) -> None:
     """Run the full preprocess -> track -> export pipeline.
 
@@ -233,16 +237,15 @@ def main(
         device: Device for FLAME tracking (``cuda`` or ``cpu``).
         batch_size: Batch size for the tracking optimiser.
         epoch: Which tracking epoch to export (``-1`` for latest).
+        cleanup: Remove intermediate alpha_maps, images, and landmark2d dirs after export.
     """
+    if debug:
+        logger.warning(
+            "Running in debug mode: using minimal steps/epochs for quick testing.")
     # ------------------------------------------------------------------
     # Step 1: Preprocess — extract frames from video
     # ------------------------------------------------------------------
     logger.info("Step 1/3: Preprocessing video")
-    # root_folder, sequence, _ = _preprocess(
-    #     input_path=input,
-    #     target_fps=target_fps,
-    #     matting_method=matting_method,
-    # )
 
     assert input.suffix in (".mov", ".mp4"), (
         f"Expected a video file (.mov/.mp4), got: {input}"
@@ -298,6 +301,15 @@ def main(
         src_folder=src_folder,
         tgt_folder=export_output_folder,
     )
+
+    # ------------------------------------------------------------------
+    # Optional cleanup — remove intermediate directories
+    # ------------------------------------------------------------------
+    if cleanup:
+        seq_dir = root_folder / sequence
+        if seq_dir.exists():
+            shutil.rmtree(seq_dir)
+            logger.info(f"Removed intermediate data {seq_dir}")
 
     logger.info("Pipeline complete!")
 
