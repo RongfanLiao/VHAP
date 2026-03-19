@@ -28,7 +28,7 @@ for SEQUENCE in "${SEQUENCES[@]}"; do
     echo "Processing: ${SEQUENCE}"
     echo "========================================="
     # Run the video-to-FLAME export pipeline for each sequence
-    python video_to_flame_param.py -i "${DATA_FOLDER}/${SEQUENCE}.mp4"
+    python tools/video_to_flame_param.py -i "${DATA_FOLDER}/${SEQUENCE}.mp4"
 done
 
 echo ""

@@ -44,7 +44,7 @@ conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
 pip install -e .
 ```
 
-For the integrated LAM inference path used by `video_gen.py`, keep the runtime pinned to the versions above, especially `diffusers==0.32.2` and `transformers==4.41.2`. Newer releases can load successfully but still change the rendered video.
+For the integrated LAM inference path used by `tools/video_gen.py`, keep the runtime pinned to the versions above, especially `diffusers==0.32.2` and `transformers==4.41.2`. Newer releases can load successfully but still change the rendered video.
 
 > [!NOTE]
 > - We use an adjusted version of [nvdiffrast](https://github.com/ShenhanQian/nvdiffrast/tree/backface-culling) for backface-culling. If you have other versions installed before, you can reinstall as follows:

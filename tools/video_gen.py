@@ -2,15 +2,19 @@
 
 Usage::
 
-    python video_gen.py -a export/data/avatar_dir
-    python video_gen.py -a export/data/avatar_dir --output output/result.mp4
+    python tools/video_gen.py -a export/data/avatar_dir
+    python tools/video_gen.py -a export/data/avatar_dir --output output/result.mp4
 """
 
+import argparse
 import os
+from pathlib import Path
 import shutil
 import sys
-import argparse
 import tempfile
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 import cv2

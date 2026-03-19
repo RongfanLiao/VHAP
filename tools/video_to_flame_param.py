@@ -12,18 +12,18 @@ Usage::
     # if not specify export_output_folder, 
     # it will be set to track_output_folder / "exported" by default.
 
-    python video_to_flame_param.py \\
+    python tools/video_to_flame_param.py \\
         --input data/monocular/obama.mp4 \\
         --output-folder output/monocular/obama \\
     
     # alternatively, you can specify export_output_folder explicitly:
-    python video_to_flame_param.py \\
+    python tools/video_to_flame_param.py \\
         --input data/monocular/obama.mp4 \\
         --output-folder output/monocular/obama \\
         --export-output-folder export/monocular/obama
 
     # With foreground matting and specific epoch
-    python video_to_flame_param.py \\
+    python tools/video_to_flame_param.py \\
         --input data/monocular/obama.mp4 \\
         --output-folder output/monocular/obama \\
         --export-output-folder export/monocular/obama \\
@@ -35,6 +35,10 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional
 
 import shutil
+import sys
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import tyro
 from tyro.conf import arg
