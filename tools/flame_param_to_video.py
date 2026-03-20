@@ -2,16 +2,16 @@
 
 Usage::
 
-    python tools/flame_param_to_video.py -a export/data/avatar_dir
-    python tools/flame_param_to_video.py -a export/data/avatar_dir --output output/result.mp4
+    python tools/flame_param_to_video.py export/data/avatar_dir
+    python tools/flame_param_to_video.py export/data/avatar_dir --output output/result.mp4
 """
 
-import argparse
 import os
 from pathlib import Path
 import shutil
 import sys
 import tempfile
+from typing import Optional
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -19,6 +19,8 @@ if __package__ in (None, ""):
 import numpy as np
 import cv2
 import torch
+import tyro
+from tyro.conf import Positional
 
 from vgen.inference import build_model, parse_configs, save_images2video, add_audio_to_video
 from vgen.runners.infer.head_utils import preprocess_image
@@ -95,55 +97,55 @@ def run_inference(avatar_dir, output_path, lam, cfg):
     print(f"Done! Output: {output_path}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="LAM CLI Inference (Lightweight Motion Format)")
-    parser.add_argument("-a","--avatar", type=str, required=True,
-                        help="Path to avatar directory (containing flame_param.npz)")
-    parser.add_argument("--output", type=str, default=None,
-                        help="Output video path (default: output/videos/<avatar>.mp4)")
-    parser.add_argument("--model_name", type=str,
-                        default="./model_zoo/lam_models/releases/lam/lam-20k/step_045500/",
-                        help="Path to model checkpoint directory")
-    parser.add_argument("--infer_config", type=str,
-                        default="./configs/inference/lam-20k-8gpu.yaml",
-                        help="Inference config yaml")
-    args = parser.parse_args()
+def main(
+    avatar: Positional[str],
+    output: Optional[str] = None,
+    model_name: str = "./model_zoo/lam_models/releases/lam/lam-20k/step_045500/",
+    infer_config: str = "./configs/inference/lam-20k-8gpu.yaml",
+) -> None:
+    """LAM CLI Inference (Lightweight Motion Format).
 
+    Args:
+        avatar: Path to avatar directory (containing flame_param.npz).
+        output: Output video path (default: output/videos/<avatar>.mp4).
+        model_name: Path to model checkpoint directory.
+        infer_config: Inference config yaml.
+    """
     # --- input validation ---
-    if not os.path.isdir(args.avatar):
-        print(f"Error: avatar directory not found: {args.avatar}")
+    if not os.path.isdir(avatar):
+        print(f"Error: avatar directory not found: {avatar}")
         sys.exit(1)
     for required in ("foreground_image.png", "flame_param.npz", "transforms.json"):
-        if not os.path.exists(os.path.join(args.avatar, required)):
-            print(f"Error: {required} not found in {args.avatar}")
+        if not os.path.exists(os.path.join(avatar, required)):
+            print(f"Error: {required} not found in {avatar}")
             sys.exit(1)
-    if not os.path.isdir(args.model_name):
-        print(f"Error: model directory not found: {args.model_name}")
+    if not os.path.isdir(model_name):
+        print(f"Error: model directory not found: {model_name}")
         sys.exit(1)
-    if not os.path.isfile(args.infer_config):
-        print(f"Error: config file not found: {args.infer_config}")
+    if not os.path.isfile(infer_config):
+        print(f"Error: config file not found: {infer_config}")
         sys.exit(1)
     if not torch.cuda.is_available():
         print("Error: CUDA is not available (required for LAM inference)")
         sys.exit(1)
 
     # set default output path
-    if args.output is None:
-        avatar_name = os.path.basename(args.avatar.rstrip('/'))
-        args.output = os.path.join("output", "videos", f"{avatar_name}.mp4")
+    if output is None:
+        avatar_name = os.path.basename(avatar.rstrip('/'))
+        output = os.path.join("output", "videos", f"{avatar_name}.mp4")
 
     # set env vars for parse_configs compatibility
     os.environ.update({
         'APP_ENABLED': '1',
-        'APP_MODEL_NAME': args.model_name,
-        'APP_INFER': args.infer_config,
+        'APP_MODEL_NAME': model_name,
+        'APP_INFER': infer_config,
         'APP_TYPE': 'infer.lam',
         'NUMBA_THREADING_LAYER': 'omp',
     })
 
     # override sys.argv so parse_configs doesn't choke on our CLI args
     original_argv = sys.argv
-    sys.argv = [sys.argv[0], f"model_name={args.model_name}"]
+    sys.argv = [sys.argv[0], f"model_name={model_name}"]
     cfg, _ = parse_configs()
     sys.argv = [original_argv[0]]
 
@@ -151,8 +153,8 @@ def main():
     lam.to('cuda')
     lam.eval()
 
-    run_inference(args.avatar, args.output, lam, cfg)
+    run_inference(avatar, output, lam, cfg)
 
 
 if __name__ == '__main__':
-    main()
+    tyro.cli(main)

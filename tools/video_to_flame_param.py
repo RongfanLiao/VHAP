@@ -12,19 +12,16 @@ Usage::
     # if not specify export_output_folder, 
     # it will be set to track_output_folder / "exported" by default.
 
-    python tools/video_to_flame_param.py \\
-        --input data/monocular/obama.mp4 \\
-        --output-folder output/monocular/obama \\
-    
+    python tools/video_to_flame_param.py data/monocular/obama.mp4 \\
+        --output-folder output/monocular/obama
+
     # alternatively, you can specify export_output_folder explicitly:
-    python tools/video_to_flame_param.py \\
-        --input data/monocular/obama.mp4 \\
+    python tools/video_to_flame_param.py data/monocular/obama.mp4 \\
         --output-folder output/monocular/obama \\
         --export-output-folder export/monocular/obama
 
     # With foreground matting and specific epoch
-    python tools/video_to_flame_param.py \\
-        --input data/monocular/obama.mp4 \\
+    python tools/video_to_flame_param.py data/monocular/obama.mp4 \\
         --output-folder output/monocular/obama \\
         --export-output-folder export/monocular/obama \\
         --matting-method robust_video_matting \\
@@ -42,7 +39,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import tyro
-from tyro.conf import arg
+from tyro.conf import arg, Positional
 
 from vhap.config.base import (
     BaseTrackingConfig,
@@ -186,10 +183,10 @@ def _format_elapsed(seconds: float) -> str:
 
 def main(
     # --- Input ---
-    input: Annotated[Path, arg(aliases=["-i"])],
+    input: Positional[Path],
     # --- Output ---
-    output_folder: Annotated[Path, arg(aliases=["-t"])] = None,
-    export_output_folder: Annotated[Path, arg(aliases=["-e"])] = None,
+    output_folder: Annotated[Optional[Path], arg(aliases=["-t"])] = None,
+    export_output_folder: Annotated[Optional[Path], arg(aliases=["-e"])] = None,
     # --- Preprocess ---
     target_fps: int = 25,
     matting_method: Optional[
