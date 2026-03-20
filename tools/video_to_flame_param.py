@@ -111,8 +111,8 @@ def _build_tracking_config(
         seq_steps = 5
         n_epochs = 2
     else:
-        init_steps = 500
-        seq_steps = 50
+        init_steps = 400
+        seq_steps = 40
         n_epochs = epoch
 
     return BaseTrackingConfig(

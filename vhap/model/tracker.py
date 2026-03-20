@@ -1357,13 +1357,13 @@ class GlobalTracker(FlameTracker):
             self.dataset,
             batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
             shuffle=False,
-            num_workers=4,
+            num_workers=8,
             pin_memory=True,
             persistent_workers=True,
         )
         tracking_stage = 'rgb_sequential_tracking' if self.cfg.exp.photometric else 'lmk_sequential_tracking'
-        for sample in dataloader:
-            if sample["timestep_index"][0].item() == 0:
+        for batch_i, sample in enumerate(dataloader):
+            if batch_i == 0:
                 self._run_init_stages(sample)
 
             self._optimize_on_sample(tracking_stage, sample)
@@ -1386,7 +1386,7 @@ class GlobalTracker(FlameTracker):
             self.dataset,
             batch_size=self.cfg.batch_size if not self.dataset.batchify_all_views else None,
             shuffle=True,
-            num_workers=4,
+            num_workers=8,
             pin_memory=True,
             persistent_workers=True,
         )
@@ -1397,10 +1397,16 @@ class GlobalTracker(FlameTracker):
     def _optimize_on_sample(self, stage, sample, lr_scale=1.0):
         """Optimize for a fixed number of steps on a single sample."""
         params = self.get_train_parameters(stage)
+        self.fill_cam_params_into_sample(sample)
+        # When cam is not optimized, detach intrinsic so graph doesn't hold
+        # a stale reference to focal_length across iterations.
+        if not self.opt_dict['cam'] and not self.calibrated:
+            sample["intrinsic"] = sample["intrinsic"].detach()
         optimizer = self.configure_optimizer(params, lr_scale=lr_scale)
         num_steps = self.cfg.pipeline[stage].num_steps
         for step_i in range(num_steps):
-            self.optimize_iter(sample, optimizer, stage, stage_step=step_i)
+            self.optimize_iter(
+                sample, optimizer, stage, stage_step=step_i, prefilled_cam=not self.opt_dict['cam'])
 
     def _optimize_on_dataloader(self, stage, dataloader, lr_scale=1.0):
         """Optimize over multiple epochs on a dataloader with LR scheduling."""
@@ -1421,11 +1427,12 @@ class GlobalTracker(FlameTracker):
                     epoch=epoch_i+1,
                 )
     
-    def optimize_iter(self, sample, optimizer, stage, stage_step=None):
+    def optimize_iter(self, sample, optimizer, stage, stage_step=None, prefilled_cam=False):
         # compute loss and update parameters
         self.clear_cache()
 
-        self.fill_cam_params_into_sample(sample)
+        if not prefilled_cam:
+            self.fill_cam_params_into_sample(sample)
         with torch.cuda.amp.autocast(enabled=self._use_amp):
             (
                 E_total,
