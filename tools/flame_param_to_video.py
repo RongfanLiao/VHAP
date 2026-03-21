@@ -295,7 +295,7 @@ def run_inference(avatar_dir, output_path, renderer, cfg, lam=None):
     t0 = perf_counter()
     _save_video(avatar_dir, output_path, rgb)
     print(f"[Save video] {_format_elapsed(perf_counter() - t0)}")
-    print(f"[Total] {_format_elapsed(perf_counter() - total_start)}")
+    print(f"[Inference] {_format_elapsed(perf_counter() - total_start)}")
 
 
 def main(
@@ -353,6 +353,7 @@ def main(
     cache_path = os.path.join(avatar, CACHE_FILENAME)
     has_cache = os.path.exists(cache_path)
 
+    overall_start = perf_counter()
     t0 = perf_counter()
     if has_cache:
         # cache exists — only need the renderer (FLAME + rasterizer)
@@ -366,6 +367,7 @@ def main(
         lam.eval()
         print(f"[Build model] {_format_elapsed(perf_counter() - t0)}")
         run_inference(avatar, output, lam.renderer, cfg, lam=lam)
+    print(f"[Overall] {_format_elapsed(perf_counter() - overall_start)}")
 
 
 if __name__ == '__main__':
