@@ -109,7 +109,7 @@ def _build_tracking_config(
         n_epochs = 2
     else:
         init_steps = 400
-        seq_steps = 40
+        seq_steps = 50
         n_epochs = epoch
 
     return BaseTrackingConfig(
@@ -197,7 +197,7 @@ def main(
     batch_size: int = 64,
     use_amp: bool = True,
     # --- Export ---
-    epoch: int = 20,
+    epoch: int = 30,
     # --- Cleanup ---
     cleanup: bool = True,
     # --- Debug ---
